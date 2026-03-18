@@ -18,10 +18,13 @@ def main():
     
     # Istanziamo l'interfaccia passando il sistema (Dependency Injection)
     interfaccia = InterfacciaDirigente(sistema_dipendenti)
-    interfaccia.print_dipendenti()
     #interfaccia.aggiungi_dipendente()
-    interfaccia.rimuovi_dipendente()
+    #interfaccia.print_dipendenti()
+    #interfaccia.rimuovi_dipendente()
+    interfaccia.print_dipendenti()
 
+    #interfaccia.aggiungi_assenza()
+    interfaccia.print_assenze_dipendente()
 
 if __name__ == '__main__':
     main()

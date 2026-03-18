@@ -1,6 +1,8 @@
 import sqlite3
 
 from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
+from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata
+
 
 
 def load_dipendenti() -> list[Dipendente] :
@@ -30,9 +32,25 @@ def load_dipendenti() -> list[Dipendente] :
             assenze_programmate=[] # Per ora lista vuota, andrà caricata dalla tabella assenze
         )
         lista_dipendenti.append(dipendente)
+
+        for dipendente in lista_dipendenti:
+            query = "select * from assenza where idDipendente = ?"
+            cursor.execute(query, (dipendente.id_dipendente,))
+            assenze_rows = cursor.fetchall()
+
+            for assenza_row in assenze_rows:
+                assenza = AssenzaProgrammata(
+                    id_assenza=assenza_row[0],
+                    data_inizio=assenza_row[2],
+                    data_fine=assenza_row[3],
+                    tipo=assenza_row[1]
+                )
+                dipendente.assenze_programmate.append(assenza)
+
     
     connection.close()
     return lista_dipendenti
+
 
 def load_turni():
     connection = sqlite3.connect('./db/turnazione.db')
@@ -84,3 +102,23 @@ def rimuovi_dipendente(id_dipendente):
     
     connection.close()
     return res
+
+
+def save_assenza(id_dipendente, tipo_assenza, data_inizio, data_fine):
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+
+    # Estraiamo il valore stringa dall'Enum per il salvataggio
+    if tipo_assenza:
+        stato_val = tipo_assenza.value
+    else:
+        return False
+
+    query = "INSERT INTO assenza (idDipendente, tipo, dataInizio, dataFine) VALUES (?, ?, ?, ?)"
+    cursor.execute(query, (id_dipendente, stato_val, data_inizio, data_fine))
+    
+    connection.commit()
+    id_generato = cursor.lastrowid # Recupera l'ID autoincrementato
+    connection.close()
+    
+    return id_generato
