@@ -1,17 +1,26 @@
-from db.init_db import init_db
-from sistemaSalvataggio import load_db
-import sqlite3
+from db.initDB import init_db
+from interfacciaDirigente import InterfacciaDirigente
+from sistemaSalvataggio import load_dipendenti
+from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 import os
+
 
 
 def main():
     db_exist = os.path.isfile('./db/turnazione.db')
 
     if db_exist:
-        load_db()
+        lista_dipendenti = load_dipendenti()
+        sistema_dipendenti = SistemaDipendenti(lista_dipendenti)
     else:
         init_db()
-
+        sistema_dipendenti = SistemaDipendenti()
+    
+    # Istanziamo l'interfaccia passando il sistema (Dependency Injection)
+    interfaccia = InterfacciaDirigente(sistema_dipendenti)
+    interfaccia.print_dipendenti()
+    #interfaccia.aggiungi_dipendente()
+    interfaccia.rimuovi_dipendente()
 
 
 if __name__ == '__main__':
