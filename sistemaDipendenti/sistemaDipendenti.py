@@ -2,7 +2,7 @@
 
 from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata
 from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
-from sistemaSalvataggio import salva_dipendente
+from sistemaSalvataggio import save_dipendente
 import sistemaSalvataggio
 
 class SistemaDipendenti:
@@ -19,13 +19,13 @@ class SistemaDipendenti:
         dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, assenze_programmate)
         
         # Salva nel DB e ottieni l'ID generato
-        id_db = salva_dipendente(dipendente)
+        id_db = save_dipendente(dipendente)
         dipendente.id_dipendente = id_db
 
         self.dipendenti.append(dipendente)
 
     def rimuovi_dipendente(self, id_dipendente: int):
-        result = sistemaSalvataggio.rimuovi_dipendente(id_dipendente)
+        result = sistemaSalvataggio.remove_dipendente(id_dipendente)
         if result is True:
             # Cerchiamo l'oggetto dipendente nella lista controllando l'attributo id_dipendente
             for dipendente in self.dipendenti:

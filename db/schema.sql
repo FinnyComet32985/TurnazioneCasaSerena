@@ -44,3 +44,21 @@ CREATE TABLE IF NOT EXISTS configurazione (
     chiave TEXT PRIMARY KEY,
     valore TEXT NOT NULL
 );
+
+-- TRIGGER CONTROLLO LICENZIAMENTO SU TURNI --
+CREATE TRIGGER IF NOT EXISTS prevent_lavora_licenziato
+BEFORE INSERT ON lavora
+FOR EACH ROW
+WHEN (SELECT stato FROM dipendente WHERE idDipendente = NEW.idDipendente) = 'LICENZIATO'
+BEGIN
+    SELECT RAISE(ABORT, 'Non è possibile assegnare turni a un dipendente licenziato.');
+END;
+
+-- TRIGGER CONTROLLO LICENZIAMENTO SU ASSENZE --
+CREATE TRIGGER IF NOT EXISTS prevent_assenza_licenziato
+BEFORE INSERT ON assenza
+FOR EACH ROW
+WHEN (SELECT stato FROM dipendente WHERE idDipendente = NEW.idDipendente) = 'LICENZIATO'
+BEGIN
+    SELECT RAISE(ABORT, 'Non è possibile aggiungere assenze a un dipendente licenziato.');
+END;

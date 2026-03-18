@@ -18,13 +18,23 @@ def main():
     
     # Istanziamo l'interfaccia passando il sistema (Dependency Injection)
     interfaccia = InterfacciaDirigente(sistema_dipendenti)
-    #interfaccia.aggiungi_dipendente()
-    #interfaccia.print_dipendenti()
-    #interfaccia.rimuovi_dipendente()
-    interfaccia.print_dipendenti()
 
-    #interfaccia.aggiungi_assenza()
-    interfaccia.print_assenze_dipendente()
+    action = -1
+
+    while action != 0:
+        print("\n\nScegli l'azione da eseguire:\n0.Esci\n1.Visualizza dipendenti\n2.Aggiungi dipendente\n3.Rimuovi dipendente\n4.Modifica dipendente\n5.Aggiungi assenza\n")
+        action = int(input())
+        print("\n")
+        if action == 1:
+            interfaccia.print_dipendenti()
+        elif action == 2:
+            interfaccia.aggiungi_dipendente()
+        elif action == 3:
+            interfaccia.rimuovi_dipendente()
+        elif action == 4:
+            interfaccia.modifica_dipendente()
+        elif action == 5:
+            interfaccia.aggiungi_assenza()
 
 if __name__ == '__main__':
     main()

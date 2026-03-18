@@ -69,7 +69,7 @@ def load_turni():
     connection.close()
     return 
 
-def salva_dipendente(dipendente):
+def save_dipendente(dipendente) -> int:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
 
@@ -86,7 +86,7 @@ def salva_dipendente(dipendente):
     return id_generato
 
 
-def rimuovi_dipendente(id_dipendente):
+def remove_dipendente(id_dipendente) -> bool:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
 
@@ -104,7 +104,7 @@ def rimuovi_dipendente(id_dipendente):
     return res
 
 
-def save_assenza(id_dipendente, tipo_assenza, data_inizio, data_fine):
+def save_assenza(id_dipendente, tipo_assenza, data_inizio, data_fine) -> int | bool:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
 
@@ -115,10 +115,17 @@ def save_assenza(id_dipendente, tipo_assenza, data_inizio, data_fine):
         return False
 
     query = "INSERT INTO assenza (idDipendente, tipo, dataInizio, dataFine) VALUES (?, ?, ?, ?)"
-    cursor.execute(query, (id_dipendente, stato_val, data_inizio, data_fine))
+
+    try: 
+        cursor.execute(query, (id_dipendente, stato_val, data_inizio, data_fine))
     
-    connection.commit()
-    id_generato = cursor.lastrowid # Recupera l'ID autoincrementato
-    connection.close()
+        connection.commit()
+        id_generato = cursor.lastrowid # Recupera l'ID autoincrementato
+        connection.close()
     
-    return id_generato
+        return id_generato
+    except sqlite3.Error as e:
+        print("errore nell'esecuzione della query: ", e)
+        return False
+    finally:
+        connection.close()
