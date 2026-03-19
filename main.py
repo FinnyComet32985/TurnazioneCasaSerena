@@ -1,6 +1,6 @@
 from db.initDB import init_db
 from interfacciaDirigente import InterfacciaDirigente
-from sistemaSalvataggio import load_dipendenti
+from sistemaCaricamento import load_dipendenti
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 import os
 
@@ -10,8 +10,7 @@ def main():
     db_exist = os.path.isfile('./db/turnazione.db')
 
     if db_exist:
-        lista_dipendenti = load_dipendenti()
-        sistema_dipendenti = SistemaDipendenti(lista_dipendenti)
+        sistema_dipendenti = load_dipendenti()
     else:
         init_db()
         sistema_dipendenti = SistemaDipendenti()
@@ -28,7 +27,7 @@ def main():
         if action == 1:
             interfaccia.print_dipendenti()
         elif action == 2:
-            interfaccia.aggiungi_dipendente()
+            interfaccia.assumi_dipendente()
         elif action == 3:
             interfaccia.rimuovi_dipendente()
         elif action == 4:

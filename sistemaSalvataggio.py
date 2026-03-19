@@ -1,83 +1,33 @@
 import sqlite3
+from sqlite3 import Date
 
-from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
-from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata
+from sistemaTurnazione.assegnazioneTurno import AssegnazioneTurno
 
-
-
-def load_dipendenti() -> list[Dipendente] :
+def save_turno(data_turno: Date, tipo_fascia: str, stato: str) -> int | None:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
 
-    query = "select * from dipendente"
+    tipo_fascia_val = tipo_fascia.value
+    stato_val = stato.value
 
-    cursor.execute(query)
-    dipendenti_rows = cursor.fetchall()
+    query = "INSERT INTO turno (dataTurno, fasciaOraria, stato) VALUES (?, ?, ?)"
+    try:
+        cursor.execute(query, (data_turno, tipo_fascia_val, stato_val))
+        connection.commit()
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"Errore durante il salvataggio del turno: {e}")
+        return None
+    finally:
+        connection.close()
 
-    lista_dipendenti = []
-
-    for dipendente_row in dipendenti_rows:
-
-        # riga è una tupla: (id, nome, cognome, ferie, rol, stato)
-        # Convertiamo la stringa dello stato nell'Enum
-        stato_enum = StatoDipendente(dipendente_row[5]) if dipendente_row[5] else StatoDipendente.ASSUNTO
-        
-        dipendente = Dipendente(
-            id_dipendente=dipendente_row[0],
-            nome=dipendente_row[1],
-            cognome=dipendente_row[2],
-            ferie_rimanenti=dipendente_row[3],
-            rol_rimanenti=dipendente_row[4],
-            stato=stato_enum,
-            assenze_programmate=[] # Per ora lista vuota, andrà caricata dalla tabella assenze
-        )
-        lista_dipendenti.append(dipendente)
-
-        for dipendente in lista_dipendenti:
-            query = "select * from assenza where idDipendente = ?"
-            cursor.execute(query, (dipendente.id_dipendente,))
-            assenze_rows = cursor.fetchall()
-
-            for assenza_row in assenze_rows:
-                assenza = AssenzaProgrammata(
-                    id_assenza=assenza_row[0],
-                    data_inizio=assenza_row[2],
-                    data_fine=assenza_row[3],
-                    tipo=assenza_row[1]
-                )
-                dipendente.assenze_programmate.append(assenza)
-
+def save_dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti) -> int:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
     
-    connection.close()
-    return lista_dipendenti
-
-
-def load_turni():
-    connection = sqlite3.connect('./db/turnazione.db')
-    cursor = connection.cursor()
-
-    query = "select * from turno"
-
-    cursor.execute(query)
-    turni = cursor.fetchall()
-
-    for turno in turni:
-        print(turno)
-
-    
-
-    connection.close()
-    return 
-
-def save_dipendente(dipendente) -> int:
-    connection = sqlite3.connect('./db/turnazione.db')
-    cursor = connection.cursor()
-
-    # Estraiamo il valore stringa dall'Enum per il salvataggio
-    stato_val = dipendente.stato.value if dipendente.stato else 'ASSUNTO'
 
     query = "INSERT INTO dipendente (nome, cognome, ferieRimanenti, rolRimanenti, stato) VALUES (?, ?, ?, ?, ?)"
-    cursor.execute(query, (dipendente.nome, dipendente.cognome, dipendente.ferie_rimanenti, dipendente.rol_rimanenti, stato_val))
+    cursor.execute(query, (nome, cognome, ferie_rimanenti, rol_rimanenti, stato))
     
     connection.commit()
     id_generato = cursor.lastrowid # Recupera l'ID autoincrementato
@@ -126,6 +76,36 @@ def save_assenza(id_dipendente, tipo_assenza, data_inizio, data_fine) -> int | b
         return id_generato
     except sqlite3.Error as e:
         print("errore nell'esecuzione della query: ", e)
+        return False
+    finally:
+        connection.close()
+
+def save_assegnazione(id_turno: int, assegnazione: AssegnazioneTurno) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+
+    jolly_val = 1 if assegnazione.jolly else 0
+    turno_breve_val = 1 if assegnazione.turnoBreve else 0
+
+    # Assicurati che il dipendente abbia un ID valido
+    if not hasattr(assegnazione.dipendente, 'id_dipendente') or assegnazione.dipendente.id_dipendente is None:
+        print(f"Errore: Il dipendente {assegnazione.dipendente.nome} {assegnazione.dipendente.cognome} non ha un ID valido per l'assegnazione.")
+        connection.close()
+        return False
+
+    query = "INSERT INTO lavora (idDipendente, idTurno, piano, jolly, turnoBreve) VALUES (?, ?, ?, ?, ?)"
+    try:
+        cursor.execute(query, (
+            assegnazione.dipendente.id_dipendente,
+            id_turno,
+            assegnazione.piano,
+            jolly_val,
+            turno_breve_val
+        ))
+        connection.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante il salvataggio dell'assegnazione: {e}")
         return False
     finally:
         connection.close()
