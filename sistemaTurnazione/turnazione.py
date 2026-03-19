@@ -84,8 +84,12 @@ class Turnazione:
         )
 
         # 3. Aggiungi la FasciaOraria alla struttura dati in memoria
-        # Se esiste già, la sovrascriviamo o aggiorniamo (qui sovrascriviamo per semplicità e coerenza col DB)
-        self.turnazioneSettimanale.setdefault(settimana_key, {}).setdefault(data_turno, {})[tipo_fascia] = fascia_oraria
+        # Se la fascia esiste già in memoria, non sovrascriverla per non perdere le assegnazioni caricate/aggiunte
+        settimana_dict = self.turnazioneSettimanale.setdefault(settimana_key, {})
+        giorno_dict = settimana_dict.setdefault(data_turno, {})
+        
+        if tipo_fascia not in giorno_dict:
+            giorno_dict[tipo_fascia] = fascia_oraria
         
         return settimana_key
 
