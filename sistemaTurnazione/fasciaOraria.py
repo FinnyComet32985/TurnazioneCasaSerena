@@ -3,7 +3,7 @@ from enum import Enum
 from sqlite3 import Date
 import sistemaSalvataggio
 
-from sistemaTurnazione import AssegnazioneTurno
+from sistemaTurnazione.assegnazioneTurno import AssegnazioneTurno
 
 
 class TipoFascia(Enum):
@@ -16,6 +16,8 @@ class StatoFascia(Enum):
     GENERATA = "GENERATA"
     MODIFICATA = "MODIFICATA"
     APPROVATA = "APPROVATA"
+    VUOTA = "VUOTA"
+    CREATO = "CREATO"
 
 class FasciaOraria:
     id_turno: int
@@ -47,6 +49,10 @@ class FasciaOraria:
             self.assegnazioni.append(assegnazione)
             return True
         return False
+
+    def ripristina_assegnazione(self, assegnazione: AssegnazioneTurno):
+        """Aggiunge un'assegnazione alla lista in memoria senza salvare su DB."""
+        self.assegnazioni.append(assegnazione)
 
     def modify(self):
         pass

@@ -1,5 +1,6 @@
 import sqlite3
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
+from sistemaTurnazione.turnazione import Turnazione
 
 def load_dipendenti() -> SistemaDipendenti:
     connection = sqlite3.connect('./db/turnazione.db')
@@ -42,19 +43,45 @@ def load_dipendenti() -> SistemaDipendenti:
     return sistema
 
 
-def load_turni():
+def load_turni(sistema_dipendenti: SistemaDipendenti) -> Turnazione:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
 
     query = "select * from turno"
-
     cursor.execute(query)
-    turni = cursor.fetchall()
+    turni_rows = cursor.fetchall()
 
-    for turno in turni:
-        print(turno)
+    turnazione = Turnazione()
 
+    for turno_row in turni_rows:
+        # turno_row: (idTurno, dataTurno, fasciaOraria, stato)
+        id_turno = turno_row[0]
+        
+        turnazione.ripristina_fascia(
+            id_turno=id_turno,
+            data_str=turno_row[1],
+            tipo_fascia_str=turno_row[2],
+            stato_str=turno_row[3]
+        )
+
+        # Carichiamo le assegnazioni (lavora) per questo turno
+        query_lavora = "SELECT idDipendente, piano, jolly, turnoBreve FROM lavora WHERE idTurno = ?"
+        cursor.execute(query_lavora, (id_turno,))
+        lavora_rows = cursor.fetchall()
+
+        for lav in lavora_rows:
+            # Risolviamo l'ID in Oggetto Dipendente usando il sistema passato
+            dipendente_obj = sistema_dipendenti.get_dipendente(lav[0])
+            if dipendente_obj is None:
+                continue
+
+            turnazione.ripristina_assegnazione(
+                id_turno=id_turno,
+                dipendente=dipendente_obj,
+                piano=lav[1],
+                jolly=bool(lav[2]),
+                turno_breve=bool(lav[3])
+            )
     
-
     connection.close()
-    return 
+    return turnazione

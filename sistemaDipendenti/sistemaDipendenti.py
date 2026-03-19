@@ -1,6 +1,6 @@
 
 
-from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata
+from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata, TipoAssenza
 from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
 from sistemaSalvataggio import save_dipendente
 import sistemaSalvataggio
@@ -23,11 +23,11 @@ class SistemaDipendenti:
         self.dipendenti.append(dipendente)
 
 
-    def assumi_dipendente(self, nome: str, cognome: str, stato: StatoDipendente | None = None, ferie_rimanenti: float | None = None, rol_rimanenti : float | None = None, assenze_programmate: list[AssenzaProgrammata] | None = None):
+    def assumi_dipendente(self, nome: str, cognome: str, stato: StatoDipendente = StatoDipendente.ASSUNTO, ferie_rimanenti: float = 0, rol_rimanenti : float = 0):
         # Salva nel DB e ottieni l'ID generato
-        id_dip = save_dipendente(nome, cognome, stato.value, ferie_rimanenti, rol_rimanenti, assenze_programmate)
+        id_dip = save_dipendente(nome, cognome, stato.value, ferie_rimanenti, rol_rimanenti)
 
-        dipendente = Dipendente(id_dip, nome, cognome, stato, ferie_rimanenti, rol_rimanenti, assenze_programmate)
+        dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, [], id_dip)
 
         self.dipendenti.append(dipendente)
 
@@ -42,12 +42,15 @@ class SistemaDipendenti:
             return True
         else:
             return False
-            
-        
 
     def get_lista_dipendenti(self):
         return self.dipendenti
 
+    def get_dipendente(self, id_dipendente: int):
+        for dipendente in self.dipendenti:
+            if dipendente.id_dipendente == id_dipendente:
+                return dipendente
+        return None
 
     def ripristina_assenza(self, id_dipendente: int, id_assenza: int, tipo_assenza_str: str, data_inizio: str, data_fine: str):
         """Ripristina un'assenza da dati grezzi e la associa al dipendente corretto."""
@@ -64,7 +67,7 @@ class SistemaDipendenti:
                 return True
         return False
 
-    def aggiungi_assenza(self, id_dipendente:int, tipo_assenza: AssenzaProgrammata, data_inizio: str, data_fine: str):
+    def aggiungi_assenza(self, id_dipendente:int, tipo_assenza: TipoAssenza, data_inizio: str, data_fine: str):
 
         eseguito = False
 
@@ -72,7 +75,7 @@ class SistemaDipendenti:
         for dipendente in self.dipendenti:
             if dipendente.id_dipendente == id_dipendente:
                 # Salviamo nel DB
-                id_db = sistemaSalvataggio.save_assenza(id_dipendente, tipo_assenza, data_inizio, data_fine)
+                id_db = sistemaSalvataggio.save_assenza(id_dipendente, tipo_assenza.value, data_inizio, data_fine)
                 
                 # Creiamo l'oggetto in memoria (passando il valore stringa dell'Enum)
                 nuova_assenza = AssenzaProgrammata(data_inizio, data_fine, tipo_assenza.value, id_assenza=id_db)

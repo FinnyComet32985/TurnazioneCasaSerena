@@ -3,24 +3,9 @@ from sqlite3 import Date
 
 from sistemaTurnazione.assegnazioneTurno import AssegnazioneTurno
 
-def save_turno(data_turno: Date, tipo_fascia: str, stato: str) -> int | None:
-    connection = sqlite3.connect('./db/turnazione.db')
-    cursor = connection.cursor()
 
-    tipo_fascia_val = tipo_fascia.value
-    stato_val = stato.value
-
-    query = "INSERT INTO turno (dataTurno, fasciaOraria, stato) VALUES (?, ?, ?)"
-    try:
-        cursor.execute(query, (data_turno, tipo_fascia_val, stato_val))
-        connection.commit()
-        return cursor.lastrowid
-    except sqlite3.Error as e:
-        print(f"Errore durante il salvataggio del turno: {e}")
-        return None
-    finally:
-        connection.close()
-
+#* SISTEMA DIPENDENTI
+#  salvataggio nuovo dipendente
 def save_dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti) -> int:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
@@ -34,8 +19,7 @@ def save_dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti) -> int
     connection.close()
     
     return id_generato
-
-
+#  licenziamento dipendente
 def remove_dipendente(id_dipendente) -> bool:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
@@ -53,21 +37,16 @@ def remove_dipendente(id_dipendente) -> bool:
     connection.close()
     return res
 
-
-def save_assenza(id_dipendente, tipo_assenza, data_inizio, data_fine) -> int | bool:
+#* SISTEMA ASSENZE
+#  salvataggio nuova assenza
+def save_assenza(id_dipendente: int, tipo_assenza: str, data_inizio, data_fine) -> int | bool:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
-
-    # Estraiamo il valore stringa dall'Enum per il salvataggio
-    if tipo_assenza:
-        stato_val = tipo_assenza.value
-    else:
-        return False
 
     query = "INSERT INTO assenza (idDipendente, tipo, dataInizio, dataFine) VALUES (?, ?, ?, ?)"
 
     try: 
-        cursor.execute(query, (id_dipendente, stato_val, data_inizio, data_fine))
+        cursor.execute(query, (id_dipendente, tipo_assenza, data_inizio, data_fine))
     
         connection.commit()
         id_generato = cursor.lastrowid # Recupera l'ID autoincrementato
@@ -79,6 +58,34 @@ def save_assenza(id_dipendente, tipo_assenza, data_inizio, data_fine) -> int | b
         return False
     finally:
         connection.close()
+
+
+#* SISTEMA TURNI
+#  salvataggio nuovo turno
+def save_turno(data_turno: Date, tipo_fascia: str, stato: str) -> int | None:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+
+    query = "INSERT INTO turno (dataTurno, fasciaOraria, stato) VALUES (?, ?, ?)"
+    try:
+        cursor.execute(query, (data_turno, tipo_fascia, stato))
+        connection.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        # Se viola il vincolo UNIQUE, recuperiamo l'ID esistente
+        query_select = "SELECT idTurno FROM turno WHERE dataTurno = ? AND fasciaOraria = ?"
+        cursor.execute(query_select, (data_turno, tipo_fascia))
+        result = cursor.fetchone()
+        connection.close()
+        if result:
+            return result[0]
+        return None
+    except sqlite3.Error as e:
+        print(f"Errore durante il salvataggio del turno: {e}")
+        return None
+
+
+
 
 def save_assegnazione(id_turno: int, assegnazione: AssegnazioneTurno) -> bool:
     connection = sqlite3.connect('./db/turnazione.db')
@@ -104,6 +111,10 @@ def save_assegnazione(id_turno: int, assegnazione: AssegnazioneTurno) -> bool:
         ))
         connection.commit()
         return True
+    except sqlite3.IntegrityError as e:
+        # Qui catturiamo sia duplicati sia l'errore del TRIGGER sulle assenze
+        print(f"Impossibile assegnare turno: {e}")
+        return False
     except sqlite3.Error as e:
         print(f"Errore durante il salvataggio dell'assegnazione: {e}")
         return False

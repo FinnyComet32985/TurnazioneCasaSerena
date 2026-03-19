@@ -3,13 +3,21 @@ from sistemaDipendenti import sistemaDipendenti
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 from sistemaDipendenti.dipendente import StatoDipendente
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
+from sistemaTurnazione import assegnazioneTurno
+from sistemaTurnazione import turnazione
+from sistemaTurnazione.fasciaOraria import TipoFascia
+from sistemaTurnazione.turnazione import Turnazione
+
 
 class InterfacciaDirigente:
     sistema_dipendenti: SistemaDipendenti
+    turnazione: Turnazione
 
 
-    def __init__(self, sistema_dipendenti: SistemaDipendenti):
+
+    def __init__(self, sistema_dipendenti: SistemaDipendenti, turnazione: Turnazione):
         self.sistema_dipendenti = sistema_dipendenti
+        self.turnazione = turnazione
 
 
     def print_dipendenti(self):
@@ -18,12 +26,12 @@ class InterfacciaDirigente:
         print("Dipendenti attivi:")
         for dipendente in dipendenti:
             if dipendente.stato is StatoDipendente.ASSUNTO:
-                print(dipendente.id_dipendente, dipendente.nome, dipendente.cognome, dipendente.stato)
+                print(dipendente.id_dipendente, dipendente.nome, dipendente.cognome)
 
         print("\nDipendenti licenziati:")        
         for dipendente in dipendenti:
             if dipendente.stato is StatoDipendente.LICENZIATO:
-                print(dipendente.id_dipendente, dipendente.nome, dipendente.cognome, dipendente.stato)
+                print(dipendente.id_dipendente, dipendente.nome, dipendente.cognome)
 
     def assumi_dipendente(self):
         nome = input("Nome: ")
@@ -102,3 +110,64 @@ class InterfacciaDirigente:
         for assenza in assenze:
             print(assenza.tipo, assenza.data_inizio, assenza.data_fine)
     
+
+    def print_turni(self):
+        input_str = input("inserisci la settimana di cui vuoi vedere i turni (anno settimana, es: 2025 2): ")
+        
+        try:
+            parti = input_str.split()
+            if len(parti) != 2:
+                raise ValueError
+            anno = int(parti[0])
+            settimana = int(parti[1])
+            settimana_key = (anno, settimana)
+        except ValueError:
+            print("Formato non valido. Inserire 'Anno Settimana' (es. 2025 5)")
+            return
+
+        settimana_dict = self.turnazione.get_turnazione_settimana(settimana_key)
+
+        for data_turno, fasce in settimana_dict.items():
+            print(f"\nDATA: {data_turno}")
+            for tipo, fascia in fasce.items():
+                dipendenti_assegnati = ", ".join([f"{a.dipendente.nome} {a.dipendente.cognome}" for a in fascia.assegnazioni])
+                print(f"  - {tipo.value}: {dipendenti_assegnati if dipendenti_assegnati else 'Vuoto'}")
+
+
+
+
+    def aggiungi_turno(self):
+        data_turno = input("inserisci la data del turno da inserire (GG/MM/AAAA):")
+
+        try:
+            # Conversione stringa -> oggetto date
+            dt_turno = datetime.strptime(data_turno, "%d/%m/%Y").date()
+        except ValueError:
+            print("Formato data non valido.")
+            return
+
+        tipo_fascia_input = input("scegli il tipo di fascia:\n1.MATTINA\n2.POMERIGGIO\n3.NOTTE\n4.RIPOSO\n\n")
+
+        if tipo_fascia_input == "1":
+            tipo_fascia = TipoFascia.MATTINA
+        elif tipo_fascia_input == "2":
+            tipo_fascia = TipoFascia.POMERIGGIO
+        elif tipo_fascia_input == "3":
+            tipo_fascia = TipoFascia.NOTTE
+        elif tipo_fascia_input == "4":
+            tipo_fascia = TipoFascia.RIPOSO
+        else:
+            print("Scelta non valida")
+            return
+
+        # Creazione del contenitore turno (FasciaOraria)
+        self.turnazione.add_turno(dt_turno, tipo_fascia)
+    
+        # Assegnazione del dipendente
+        id_dipendente = input("a quale dipendente vuoi assegnare il turno?")
+        if not id_dipendente.isdigit():
+            print("ID non valido")
+            return
+
+        # Per semplicità ora passiamo piano 0 e booleani False, in futuro si possono chiedere con input
+        self.turnazione.assegna_turno(self.sistema_dipendenti, int(id_dipendente), dt_turno, tipo_fascia, piano=0, jolly=False, turno_breve=False)

@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS turno (
     idTurno INTEGER PRIMARY KEY AUTOINCREMENT,
     dataTurno DATE NOT NULL,
     fasciaOraria VARCHAR(9) CHECK(fasciaOraria IN ('MATTINA', 'POMERIGGIO', 'NOTTE', 'RIPOSO')) NOT NULL,
-    stato VARCHAR(9) CHECK(stato IN ('GENERATO', 'MODIFICATO', 'APPROVATO', 'CREATO')) NOT NULL
+    stato VARCHAR(9) CHECK(stato IN ('GENERATO', 'MODIFICATO', 'APPROVATO', 'CREATO', 'VUOTA')) NOT NULL,
+    UNIQUE (dataTurno, fasciaOraria)
 );
 
 -- TABELLA LAVORA --
@@ -61,4 +62,23 @@ FOR EACH ROW
 WHEN (SELECT stato FROM dipendente WHERE idDipendente = NEW.idDipendente) = 'LICENZIATO'
 BEGIN
     SELECT RAISE(ABORT, 'Non è possibile aggiungere assenze a un dipendente licenziato.');
+END;
+
+
+-- Trigger per impedire assegnazione se il dipendente è assente
+CREATE TRIGGER IF NOT EXISTS check_assenza_before_insert
+BEFORE INSERT ON lavora
+BEGIN
+    SELECT CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM assenza a
+            JOIN turno t ON t.idTurno = NEW.idTurno
+            WHERE a.idDipendente = NEW.idDipendente
+            -- Controlliamo se la data del turno cade nel range dell'assenza.
+            -- Usiamo date() per estrarre solo la parte YYYY-MM-DD dalle stringhe datetime
+            AND t.dataTurno BETWEEN date(a.dataInizio) AND date(a.dataFine)
+        )
+        THEN RAISE(ABORT, 'Errore: Il dipendente è in ferie/malattia in questa data.')
+    END;
 END;
