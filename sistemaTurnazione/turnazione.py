@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaDipendenti.dipendente import Dipendente
 from sistemaTurnazione.assegnazioneTurno import AssegnazioneTurno
@@ -93,6 +93,13 @@ class Turnazione:
         
         return settimana_key
 
+    def check_max_ore_settimanali(self, id_dipendente: int, settimana_key: tuple[int, int]) -> bool:
+        """
+        Verifica se il dipendente ha superato il monte ore massimo settimanale.
+        Per il momento restituisce sempre True (logica da implementare).
+        """
+        return True
+
     def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False) -> bool:
         """Cerca la fascia specifica e aggiunge l'assegnazione (che salva su DB)."""
         anno, settimana, _ = data_turno.isocalendar()
@@ -101,13 +108,30 @@ class Turnazione:
         try:
             fascia = self.turnazioneSettimanale[settimana_key][data_turno][tipo_fascia]
             
+            # Controllo vincolo ore massime settimanali
+            if not self.check_max_ore_settimanali(id_dipendente, settimana_key):
+                print("Errore: Assegnazione bloccata. Il dipendente supera le ore massime settimanali consentite.")
+                return False
+
             # Usiamo l'istanza di sistema_dipendenti che ci hai passato per ottenere l'oggetto
             dipendente_obj = sistema_dipendenti.get_dipendente(id_dipendente)
             if dipendente_obj is None:
                 print("Dipendente non trovato")
                 return False
+            
+            esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly))
+
+            # AUTOMATISMO: Se è un turno di NOTTE, assegna automaticamente RIPOSO il giorno dopo
+            if esito and tipo_fascia == TipoFascia.NOTTE:
+                data_domani = data_turno + timedelta(days=1)
+                # Assicuriamo che esista la fascia di riposo per il giorno dopo (creandola se serve)
+                self.add_turno(data_domani, TipoFascia.RIPOSO, StatoFascia.CREATO)
                 
-            return fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly))
+                print(f"Assegnazione automatica RIPOSO per {dipendente_obj.nome} {dipendente_obj.cognome} il {data_domani}")
+                # Richiamiamo assegna_turno per il riposo (passando piano=None come da specifiche)
+                self.assegna_turno(sistema_dipendenti, id_dipendente, data_domani, TipoFascia.RIPOSO, piano=None)
+
+            return esito
         except KeyError:
             print("Errore: La fascia oraria specificata non esiste.")
             return False

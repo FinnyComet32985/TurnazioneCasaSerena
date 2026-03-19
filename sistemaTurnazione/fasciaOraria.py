@@ -40,6 +40,11 @@ class FasciaOraria:
             self.stato = stato
     
     def add_assegnazione(self, assegnazione: AssegnazioneTurno):
+        # VINCOLO: Il turno breve è applicabile solo alla fascia MATTINA
+        if assegnazione.turnoBreve and self.tipo != TipoFascia.MATTINA:
+            print(f"Errore: Il turno breve non può essere assegnato alla fascia {self.tipo.value}. È valido solo per MATTINA.")
+            return False
+
         # Verifichiamo che la fascia oraria abbia un ID (sia salvata su DB) prima di salvare l'assegnazione
         if getattr(self, 'id_turno', None) is None:
             return False
