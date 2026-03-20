@@ -110,6 +110,39 @@ class InterfacciaDirigente:
         for assenza in assenze:
             print(assenza.tipo, assenza.data_inizio, assenza.data_fine)
     
+    def approva_turnazione_settimana(self):
+        """
+        Approva l'intera settimana, calcola i saldi e aggiorna le banche ore.
+        """
+        input_str = input("Inserisci la settimana da APPROVARE (anno settimana, es: 2025 2): ")
+        try:
+            parti = input_str.split()
+            if len(parti) != 2: raise ValueError
+            settimana_key = (int(parti[0]), int(parti[1]))
+            
+            confirm = input(f"Sei sicuro di voler approvare la settimana {settimana_key}? Questo aggiornerà la banca ore di tutti i dipendenti. (s/n): ")
+            if confirm.lower() == 's':
+                if self.turnazione.approva_settimana(self.sistema_dipendenti, settimana_key):
+                    print("Settimana approvata con successo.")
+        except ValueError:
+            print("Formato non valido.")
+
+    def riapri_turnazione_settimana(self):
+        """
+        Rollback: Riapre la settimana e stenta le ore dalla banca ore.
+        """
+        input_str = input("Inserisci la settimana da RIAPRIRE/MODIFICARE (anno settimana, es: 2025 2): ")
+        try:
+            parti = input_str.split()
+            if len(parti) != 2: raise ValueError
+            settimana_key = (int(parti[0]), int(parti[1]))
+            
+            confirm = input(f"ATTENZIONE: Stai per riaprire la settimana {settimana_key}. Le ore aggiunte alla banca ore verranno RIMOSSE. Procedere? (s/n): ")
+            if confirm.lower() == 's':
+                if self.turnazione.riapri_settimana(self.sistema_dipendenti, settimana_key):
+                    print("Settimana riaperta. Ora puoi modificarla.")
+        except ValueError:
+            print("Formato non valido.")
 
     def print_turni(self):
         input_str = input("inserisci la settimana di cui vuoi vedere i turni (anno settimana, es: 2025 2): ")
@@ -130,8 +163,9 @@ class InterfacciaDirigente:
         for data_turno, fasce in settimana_dict.items():
             print(f"\nDATA: {data_turno}")
             for tipo, fascia in fasce.items():
+                status_flag = f"[{fascia.stato.name}]" if fascia.stato else ""
                 dipendenti_assegnati = ", ".join([f"{a.dipendente.nome} {a.dipendente.cognome}" for a in fascia.assegnazioni])
-                print(f"  - {tipo.value}: {dipendenti_assegnati if dipendenti_assegnati else 'Vuoto'}")
+                print(f"  - {tipo.value} {status_flag}: {dipendenti_assegnati if dipendenti_assegnati else 'Vuoto'}")
 
 
 

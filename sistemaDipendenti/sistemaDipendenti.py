@@ -1,4 +1,4 @@
-
+from datetime import datetime
 
 from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata, TipoAssenza
 from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
@@ -15,19 +15,19 @@ class SistemaDipendenti:
             self.dipendenti = []
 
 
-    def ripristina_dipendente(self, id_dipendente: int, nome: str, cognome: str, ferie_rimanenti: float, rol_rimanenti: float, stato_str: str):
+    def ripristina_dipendente(self, id_dipendente: int, nome: str, cognome: str, ferie_rimanenti: float, rol_rimanenti: float, banca_ore: float, stato_str: str):
         """Crea un'istanza di dipendente da dati grezzi (DB) e la aggiunge alla lista senza salvare su DB."""
         stato = StatoDipendente(stato_str) if stato_str else StatoDipendente.ASSUNTO
         
-        dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, [], id_dipendente)
+        dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, banca_ore, [], id_dipendente)
         self.dipendenti.append(dipendente)
 
 
-    def assumi_dipendente(self, nome: str, cognome: str, stato: StatoDipendente = StatoDipendente.ASSUNTO, ferie_rimanenti: float = 0, rol_rimanenti : float = 0):
+    def assumi_dipendente(self, nome: str, cognome: str, stato: StatoDipendente = StatoDipendente.ASSUNTO, ferie_rimanenti: float = 0, rol_rimanenti : float = 0, banca_ore: float = 0):
         # Salva nel DB e ottieni l'ID generato
-        id_dip = save_dipendente(nome, cognome, stato.value, ferie_rimanenti, rol_rimanenti)
+        id_dip = save_dipendente(nome, cognome, stato.value, ferie_rimanenti, rol_rimanenti, banca_ore)
 
-        dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, [], id_dip)
+        dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, banca_ore, [], id_dip)
 
         self.dipendenti.append(dipendente)
 
@@ -80,6 +80,29 @@ class SistemaDipendenti:
                 # Creiamo l'oggetto in memoria (passando il valore stringa dell'Enum)
                 nuova_assenza = AssenzaProgrammata(data_inizio, data_fine, tipo_assenza.value, id_assenza=id_db)
                 dipendente.assenze_programmate.append(nuova_assenza)
+                
+                # --- CALCOLO CONSUMO FERIE / ROL ---
+                # Convertiamo le stringhe in datetime per calcolare la differenza
+                fmt = "%Y-%m-%d %H:%M:%S"
+                dt_inizio = datetime.strptime(data_inizio, fmt)
+                dt_fine = datetime.strptime(data_fine, fmt)
+                delta = dt_fine - dt_inizio
+                
+                if tipo_assenza == TipoAssenza.FERIE:
+                    # Ferie calcolate in giorni. Se la differenza è < 24h ma copre un turno, conta come 1?
+                    # Semplificazione: usiamo i giorni arrotondati + frazioni
+                    giorni = delta.total_seconds() / 86400  # 86400 secondi in un giorno
+                    # Arrotondiamo a 0.5 o intero per pulizia, o lasciamo float puro
+                    dipendente.ferie_rimanenti = round(dipendente.ferie_rimanenti - giorni, 2)
+                    
+                elif tipo_assenza == TipoAssenza.ROL:
+                    # ROL calcolati in ore
+                    ore = delta.total_seconds() / 3600
+                    dipendente.rol_rimanenti = round(dipendente.rol_rimanenti - ore, 2)
+                
+                # Aggiorniamo il saldo nel DB
+                self.modifica_dipendente(dipendente.id_dipendente, dipendente.nome, dipendente.cognome, dipendente.ferie_rimanenti, dipendente.rol_rimanenti, dipendente.banca_ore)
+                
                 eseguito = True
                 break
         
@@ -91,15 +114,20 @@ class SistemaDipendenti:
                 return dipendente.get_assenze_programmate()
         return []
 
-    def modifica_dipendente(self, id_dipendente: int, nome: str, cognome: str, ferie: float, rol: float):
-        result = sistemaSalvataggio.update_dipendente(id_dipendente, nome, cognome, ferie, rol)
+    def modifica_dipendente(self, id_dipendente: int, nome: str, cognome: str, ferie: float, rol: float, banca_ore: float = None):
+        # Se banca_ore non è passato, recuperiamo quello attuale (per compatibilità chiamate vecchie)
+        dip = self.get_dipendente(id_dipendente)
+        if banca_ore is None and dip:
+            banca_ore = dip.banca_ore
+            
+        result = sistemaSalvataggio.update_dipendente(id_dipendente, nome, cognome, ferie, rol, banca_ore)
         if result:
-            dip = self.get_dipendente(id_dipendente)
             if dip:
                 dip.nome = nome
                 dip.cognome = cognome
                 dip.ferie_rimanenti = ferie
                 dip.rol_rimanenti = rol
+                dip.banca_ore = banca_ore
             return True
         return False
         
@@ -109,5 +137,49 @@ class SistemaDipendenti:
             dip = self.get_dipendente(id_dipendente)
             if dip:
                 dip.assenze_programmate = [a for a in dip.assenze_programmate if getattr(a, 'id_assenza', None) != id_assenza]
+            return True
+        return False
+
+    def matura_ratei_mensili(self):
+        """Aggiunge i ratei mensili (ferie e rol) a tutti i dipendenti attivi."""
+        print("--- Esecuzione maturazione automatica ratei mensili ---")
+        for dip in self.dipendenti:
+            if dip.stato == StatoDipendente.ASSUNTO:
+                # CCNL Cooperative Sociali (Calcolo esatto arrotondato)
+                # FERIE: 26 giorni annui / 12 mesi
+                dip.ferie_rimanenti = round(dip.ferie_rimanenti + (26 / 12), 2)
+                # ROL: 32 ore annue / 12 mesi
+                dip.rol_rimanenti = round(dip.rol_rimanenti + (32 / 12), 2)
+                
+                # Salvataggio su DB
+                self.modifica_dipendente(
+                    dip.id_dipendente, 
+                    dip.nome, 
+                    dip.cognome, 
+                    dip.ferie_rimanenti, 
+                    dip.rol_rimanenti,
+                    dip.banca_ore
+                )
+
+    def aggiorna_banca_ore(self, id_dipendente: int, delta_ore: float):
+        """
+        Aggiorna la banca ore di un dipendente aggiungendo (o sottraendo) un delta.
+        Salva immediatamente la modifica sul database.
+        """
+        dip = self.get_dipendente(id_dipendente)
+        if dip:
+            dip.banca_ore += delta_ore
+            # Arrotondiamo per evitare problemi di floating point
+            dip.banca_ore = round(dip.banca_ore, 2)
+            
+            # Salviamo la modifica completa del dipendente
+            self.modifica_dipendente(
+                dip.id_dipendente,
+                dip.nome,
+                dip.cognome,
+                dip.ferie_rimanenti,
+                dip.rol_rimanenti,
+                dip.banca_ore
+            )
             return True
         return False

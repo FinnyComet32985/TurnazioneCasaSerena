@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaTurnazione.turnazione import Turnazione
@@ -15,14 +16,19 @@ def load_dipendenti() -> SistemaDipendenti:
     sistema = SistemaDipendenti()
 
     for dipendente_row in dipendenti_rows:
-        # riga è una tupla: (id, nome, cognome, ferie, rol, stato)
+        # riga è una tupla: (id, nome, cognome, ferie, rol, bancaOre, stato)
+        # Nota: l'ordine dipende da come è stato creato il DB.
+        # Assumiamo che bancaOre sia stato aggiunto dopo rolRimanenti o gestiamo l'indice dinamicamente.
+        # Per sicurezza in questa fase, usiamo l'indice in base alla query "select *". 
+        # Se il DB è vecchio (senza bancaOre), questa riga fallirà se non ricrei il DB.
         sistema.ripristina_dipendente(
             id_dipendente=dipendente_row[0], 
             nome=dipendente_row[1],
             cognome=dipendente_row[2], 
             ferie_rimanenti=dipendente_row[3], 
             rol_rimanenti=dipendente_row[4], 
-            stato_str=dipendente_row[5]
+            banca_ore=dipendente_row[5],
+            stato_str=dipendente_row[6]
         )
 
         # Carichiamo le assenze per questo dipendente
@@ -85,3 +91,22 @@ def load_turni(sistema_dipendenti: SistemaDipendenti) -> Turnazione:
     
     connection.close()
     return turnazione
+
+
+def load_last_update():
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+
+    query = "SELECT valore FROM configurazione WHERE chiave='last_update'"
+
+    cursor.execute(query)
+    result = cursor.fetchone()
+
+    if result:
+        connection.close()
+        return result[0]
+    else:
+        connection.close()
+        return None
+    
+    

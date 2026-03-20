@@ -32,6 +32,7 @@ class Turnazione:
     }
 
     PAUSA_TRA_TURNI: int = 11
+    RIPOSO_SETTIMANALE_MIN: int = 24 # Ore consecutive
     
     # Costanti Vincoli Assegnazione
     MAX_JOLLY_PER_TURNO: int = 1
@@ -147,8 +148,153 @@ class Turnazione:
 
         return [True, None]
 
+    def _get_ore_lavorate_settimana(self, id_dipendente: int, settimana_key: tuple[int, int]) -> float:
+        """Helper function to calculate total hours worked by an employee in a week."""
+        assegnazioni = self.get_assegnazioni_dipendente(settimana_key, id_dipendente)
+        ore_lavorate = 0
+        for fascia, assegnazione in assegnazioni:
+            if fascia.tipo == TipoFascia.RIPOSO:
+                continue
+            
+            if fascia.tipo == TipoFascia.MATTINA and assegnazione.turnoBreve:
+                ore_lavorate += self.ORE_TURNI["MATTINA CORTA"]
+            else:
+                ore_lavorate += self.ORE_TURNI.get(fascia.tipo.value, 0)
+        return ore_lavorate
+
+    def calcola_saldo_ore_settimanale(self, id_dipendente: int, settimana_key: tuple[int, int]) -> float:
+        """
+        Calcola il saldo ore di un dipendente per una data settimana (ore lavorate - 38).
+        Un risultato positivo indica ore da aggiungere alla banca ore.
+        Un risultato negativo indica ore da recuperare (sottrarre dalla banca ore).
+        """
+        ore_lavorate = self._get_ore_lavorate_settimana(id_dipendente, settimana_key)
+        return ore_lavorate - self.MAX_ORE # MAX_ORE is 38
+
+    def _check_media_ore_4_mesi(self, id_dipendente: int, data_riferimento: date, nome_dipendente: str = "") -> bool:
+        """
+        Controlla la media delle ore lavorative nelle ultime 16 settimane (circa 4 mesi)
+        per verificare il rispetto del limite di 48 ore settimanali medie.
+        """
+        NUM_SETTIMANE_MEDIA = 16
+        ore_totali_periodo = 0
+        
+        settimane_controllate = set() # Per evitare di calcolare due volte la stessa settimana
+
+        # Itera all'indietro per un numero sufficiente di giorni per coprire 16 settimane
+        for i in range(NUM_SETTIMANE_MEDIA * 7 + 7): 
+            data_target = data_riferimento - timedelta(days=i)
+            anno, settimana, _ = data_target.isocalendar()
+            settimana_key_target = (anno, settimana)
+
+            if settimana_key_target not in settimane_controllate:
+                ore_lavorate_settimana = self._get_ore_lavorate_settimana(id_dipendente, settimana_key_target)
+                ore_totali_periodo += ore_lavorate_settimana
+                settimane_controllate.add(settimana_key_target)
+            
+            if len(settimane_controllate) >= NUM_SETTIMANE_MEDIA:
+                break
+                
+        media_settimanale = ore_totali_periodo / NUM_SETTIMANE_MEDIA
+        
+        if media_settimanale > self.MAX_ORE_MEDIA_MENSILE:
+            nome_str = f"dal dipendente {nome_dipendente} (ID {id_dipendente})" if nome_dipendente else f"dal dipendente ID {id_dipendente}"
+            print(f"ATTENZIONE LEGALE: La media di ore lavorate {nome_str} nelle ultime {NUM_SETTIMANE_MEDIA} settimane è {media_settimanale:.2f}, superando il limite di {self.MAX_ORE_MEDIA_MENSILE}h.")
+            return False
+            
+        return True
+
     def _check_max_mena_ore_settimanali(self):
         pass
+
+    def _check_riposo_settimanale(self, settimana_key: tuple[int, int], id_dipendente: int, data_nuovo_turno: date, tipo_nuovo_turno: TipoFascia, turno_breve: bool) -> bool:
+        """
+        Verifica se esiste almeno un periodo di riposo di 24h consecutive associato alla settimana di lavoro,
+        controllando anche i turni a cavallo con la settimana precedente e successiva.
+        """
+        # --- 1. Costruisce la lista dei segmenti di lavoro per la settimana corrente, incluso il nuovo turno ---
+        assegnazioni = self.get_assegnazioni_dipendente(settimana_key, id_dipendente)
+        
+        # Costruiamo la lista di tutti i segmenti lavorativi (inizio, fine)
+        segmenti_lavoro = []
+        
+        # Aggiungiamo i turni esistenti
+        for item in assegnazioni:
+            fascia: FasciaOraria = item[0]
+            assegnazione: AssegnazioneTurno = item[1]
+            if fascia.tipo == TipoFascia.RIPOSO: 
+                continue
+            
+            orari_key = fascia.tipo.value
+            if fascia.tipo == TipoFascia.MATTINA and assegnazione.turnoBreve:
+                orari = self.ORARIO_TURNI["MATTINA CORTA"]
+            else:
+                orari = self.ORARIO_TURNI[orari_key]
+
+            start = datetime.combine(fascia.data_turno, time(hour=orari[0]))
+            end = datetime.combine(fascia.data_turno, time(hour=orari[1]))
+            if orari[1] < orari[0]: 
+                end += timedelta(days=1) # Notte
+            
+            segmenti_lavoro.append((start, end))
+            
+        # Aggiungiamo il turno ipotetico
+        if tipo_nuovo_turno != TipoFascia.RIPOSO:
+            if tipo_nuovo_turno == TipoFascia.MATTINA and turno_breve:
+                orari_new = self.ORARIO_TURNI["MATTINA CORTA"]
+            else:
+                orari_new = self.ORARIO_TURNI[tipo_nuovo_turno.value]
+
+            start_new = datetime.combine(data_nuovo_turno, time(hour=orari_new[0]))
+            end_new = datetime.combine(data_nuovo_turno, time(hour=orari_new[1]))
+            if orari_new[1] < orari_new[0]: 
+                end_new += timedelta(days=1)
+            segmenti_lavoro.append((start_new, end_new))
+            
+        if not segmenti_lavoro:
+            return True # Se non ci sono turni di lavoro nella settimana, il riposo è garantito.
+            
+        segmenti_lavoro.sort(key=lambda x: x[0])
+        
+        # --- 2. Controllo dei gap interni alla settimana ---
+        for i in range(len(segmenti_lavoro) - 1):
+            fine_precedente = segmenti_lavoro[i][1]
+            inizio_successivo = segmenti_lavoro[i+1][0]
+            delta_ore = (inizio_successivo - fine_precedente).total_seconds() / 3600
+            
+            if delta_ore >= self.RIPOSO_SETTIMANALE_MIN:
+                return True # Trovato un riposo valido all'interno della settimana.
+
+        # --- 3. Se non ci sono gap interni, controlliamo i confini con le altre settimane ---
+        
+        # Controlla il confine INIZIALE (tra settimana precedente e corrente)
+        anno, settimana = settimana_key
+        primo_giorno_settimana = date.fromisocalendar(anno, settimana, 1)
+        data_settimana_prec = primo_giorno_settimana - timedelta(days=1)
+        settimana_key_prec = (data_settimana_prec.year, data_settimana_prec.isocalendar()[1])
+        
+        turni_prec = self.get_assegnazioni_dipendente(settimana_key_prec, id_dipendente)
+        if not turni_prec:
+            return True # Se la settimana prima non ha lavorato, ha avuto riposo.
+        
+        # Trova l'ultimo turno della settimana precedente
+        ultimo_turno_prec = max(turni_prec, key=lambda item: item[0].data_turno)
+        fine_ultimo_turno_prec = datetime.combine(ultimo_turno_prec[0].data_turno, time(hour=self.ORARIO_TURNI[ultimo_turno_prec[0].tipo.value][1]))
+        if self.ORARIO_TURNI[ultimo_turno_prec[0].tipo.value][1] < self.ORARIO_TURNI[ultimo_turno_prec[0].tipo.value][0]:
+            fine_ultimo_turno_prec += timedelta(days=1)
+
+        if (segmenti_lavoro[0][0] - fine_ultimo_turno_prec).total_seconds() / 3600 >= self.RIPOSO_SETTIMANALE_MIN:
+            return True
+
+        # Controlla il confine FINALE (tra settimana corrente e successiva)
+        data_settimana_succ = primo_giorno_settimana + timedelta(days=7)
+        settimana_key_succ = (data_settimana_succ.year, data_settimana_succ.isocalendar()[1])
+        turni_succ = self.get_assegnazioni_dipendente(settimana_key_succ, id_dipendente)
+        if not turni_succ:
+            return True # Se la settimana dopo non lavora, inizierà un periodo di riposo.
+
+        # Se nessun controllo ha dato esito positivo, non c'è un riposo di 24h garantito.
+        return False
 
     def _check_riposo_tra_turni(self, settimana_key: tuple[int, int], data_turno: date, tipo_fascia: TipoFascia, dipendente_obj: Dipendente, turno_breve: bool, piano: int, jolly: bool) -> bool:
         """
@@ -243,6 +389,14 @@ class Turnazione:
 
         # Verifica vincolo 11 ore di riposo
         self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly)
+        
+        # Verifica vincolo 24 ore riposo settimanale (Warning)
+        if not self._check_riposo_settimanale(settimana_key, id_dipendente, data_turno, tipo_fascia, turno_breve):
+            print(f"ATTENZIONE: Con questo inserimento, {dipendente_obj.nome} potrebbe non avere 24h consecutive di riposo in questa settimana!")
+
+        # Verifica media 48h/4 mesi (Warning Legale)
+        self._check_media_ore_4_mesi(id_dipendente, data_turno, f"{dipendente_obj.nome} {dipendente_obj.cognome}")
+            # Non blocchiamo (raise Error) perché magari il riposo è a cavallo della settimana, ma stampiamo warning.
 
         # Se tutti i controlli passano, procediamo con l'assegnazione reale
         # L'assegnazione chiama database che se bloccata (es per Trigger Assenze) restituirà False
@@ -258,6 +412,89 @@ class Turnazione:
             self.assegna_turno(sistema_dipendenti, id_dipendente, data_domani, TipoFascia.RIPOSO, piano=None)
 
         return esito
+
+    def approva_settimana(self, sistema_dipendenti: SistemaDipendenti, settimana_key: tuple[int, int]) -> bool:
+        """
+        1. Verifica che la settimana non sia già approvata.
+        2. Calcola il saldo ore per ogni dipendente coinvolto nella settimana.
+        3. Aggiorna la banca ore dei dipendenti (aggiungendo il saldo).
+        4. Imposta lo stato di tutti i turni della settimana su APPROVATA.
+        """
+        settimana_dict = self.turnazioneSettimanale.get(settimana_key, {})
+        if not settimana_dict:
+            print("Nessun turno trovato per questa settimana.")
+            return False
+
+        # Verifica preliminare: se trovo anche solo un turno già APPROVATO, blocco per sicurezza
+        for fasce in settimana_dict.values():
+            for fascia in fasce.values():
+                if fascia.stato == StatoFascia.APPROVATA:
+                    print("Errore: Questa settimana risulta già parzialmente o totalmente approvata. Esegui il 'Riapri Settimana' se vuoi ricalcolarla.")
+                    return False
+
+        # Identifichiamo tutti i dipendenti che hanno lavorato questa settimana
+        dipendenti_coinvolti = set()
+        for fasce in settimana_dict.values():
+            for fascia in fasce.values():
+                for assegnazione in fascia.assegnazioni:
+                    dipendenti_coinvolti.add(assegnazione.dipendente.id_dipendente)
+
+        print(f"Approvazione settimana {settimana_key}... Aggiornamento banca ore per {len(dipendenti_coinvolti)} dipendenti.")
+
+        # 1. Aggiornamento Banca Ore
+        for id_dip in dipendenti_coinvolti:
+            saldo = self.calcola_saldo_ore_settimanale(id_dip, settimana_key)
+            sistema_dipendenti.aggiorna_banca_ore(id_dip, saldo)
+            print(f"  -> Dipendente {id_dip}: Saldo {saldo:+.2f} ore applicato.")
+
+        # 2. Aggiornamento Stato Turni (Lock)
+        for fasce in settimana_dict.values():
+            for fascia in fasce.values():
+                fascia.stato = StatoFascia.APPROVATA
+                sistemaSalvataggio.update_stato_turno(fascia.id_turno, StatoFascia.APPROVATA.value)
+        
+        return True
+
+    def riapri_settimana(self, sistema_dipendenti: SistemaDipendenti, settimana_key: tuple[int, int]) -> bool:
+        """
+        ROLLBACK:
+        1. Verifica che la settimana sia effettivamente APPROVATA.
+        2. Calcola il saldo ore (basato sui turni attuali) e lo SOTTRAE alla banca ore (annullando l'effetto dell'approvazione).
+        3. Riporta lo stato dei turni su MODIFICATA.
+        """
+        settimana_dict = self.turnazioneSettimanale.get(settimana_key, {})
+        
+        # Identifichiamo i dipendenti
+        dipendenti_coinvolti = set()
+        almeno_uno_approvato = False
+        
+        for fasce in settimana_dict.values():
+            for fascia in fasce.values():
+                if fascia.stato == StatoFascia.APPROVATA:
+                    almeno_uno_approvato = True
+                for assegnazione in fascia.assegnazioni:
+                    dipendenti_coinvolti.add(assegnazione.dipendente.id_dipendente)
+        
+        if not almeno_uno_approvato:
+            print("Questa settimana non è approvata, non c'è nulla da riaprire.")
+            return False
+
+        print(f"ROLLBACK Settimana {settimana_key}... Storno banca ore per {len(dipendenti_coinvolti)} dipendenti.")
+
+        # 1. Storno Banca Ore (Sottraiamo il saldo)
+        for id_dip in dipendenti_coinvolti:
+            saldo = self.calcola_saldo_ore_settimana(id_dip, settimana_key)
+            # NOTA: Passiamo -saldo per annullare l'operazione precedente
+            sistema_dipendenti.aggiorna_banca_ore(id_dip, -saldo) 
+            print(f"  -> Dipendente {id_dip}: Storno di {-saldo:+.2f} ore applicato.")
+
+        # 2. Sblocco Turni
+        for fasce in settimana_dict.values():
+            for fascia in fasce.values():
+                fascia.stato = StatoFascia.MODIFICATA
+                sistemaSalvataggio.update_stato_turno(fascia.id_turno, StatoFascia.MODIFICATA.value)
+
+        return True
 
 
     def get_assegnazioni_dipendente(self, info_settimana: tuple[int, int] | dict, id_dipendente: int) -> List[list]:

@@ -6,13 +6,13 @@ from sistemaTurnazione.assegnazioneTurno import AssegnazioneTurno
 
 #* SISTEMA DIPENDENTI
 #  salvataggio nuovo dipendente
-def save_dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti) -> int:
+def save_dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, banca_ore) -> int:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
     
 
-    query = "INSERT INTO dipendente (nome, cognome, ferieRimanenti, rolRimanenti, stato) VALUES (?, ?, ?, ?, ?)"
-    cursor.execute(query, (nome, cognome, ferie_rimanenti, rol_rimanenti, stato))
+    query = "INSERT INTO dipendente (nome, cognome, ferieRimanenti, rolRimanenti, bancaOre, stato) VALUES (?, ?, ?, ?, ?, ?)"
+    cursor.execute(query, (nome, cognome, ferie_rimanenti, rol_rimanenti, banca_ore, stato))
     
     connection.commit()
     id_generato = cursor.lastrowid # Recupera l'ID autoincrementato
@@ -85,6 +85,20 @@ def save_turno(data_turno: Date, tipo_fascia: str, stato: str) -> int | None:
         return None
 
 
+def update_stato_turno(id_turno: int, nuovo_stato: str) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    query = "UPDATE turno SET stato = ? WHERE idTurno = ?"
+    success = False
+    try:
+        cursor.execute(query, (nuovo_stato, id_turno))
+        connection.commit()
+        success = True
+    except sqlite3.Error as e:
+        print(f"Errore SQL Update Stato Turno: {e}")
+    finally:
+        connection.close()
+    return success
 
 
 def save_assegnazione(id_turno: int, assegnazione: AssegnazioneTurno) -> bool:
@@ -121,13 +135,13 @@ def save_assegnazione(id_turno: int, assegnazione: AssegnazioneTurno) -> bool:
     finally:
         connection.close()
 
-def update_dipendente(id_dipendente: int, nome: str, cognome: str, ferie: float, rol: float) -> bool:
+def update_dipendente(id_dipendente: int, nome: str, cognome: str, ferie: float, rol: float, banca_ore: float) -> bool:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
-    query = "UPDATE dipendente SET nome=?, cognome=?, ferieRimanenti=?, rolRimanenti=? WHERE idDipendente=?"
+    query = "UPDATE dipendente SET nome=?, cognome=?, ferieRimanenti=?, rolRimanenti=?, bancaOre=? WHERE idDipendente=?"
     success = False
     try:
-        cursor.execute(query, (nome, cognome, ferie, rol, id_dipendente))
+        cursor.execute(query, (nome, cognome, ferie, rol, banca_ore, id_dipendente))
         connection.commit()
         success = True
     except sqlite3.Error as e:
@@ -150,3 +164,15 @@ def delete_assenza(id_assenza: int) -> bool:
     finally:
         connection.close()
     return success
+
+def save_last_update(data: str):
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    query = "INSERT OR REPLACE INTO configurazione (chiave, valore) VALUES ('last_update', ?)"
+    try:
+        cursor.execute(query, (data,))
+        connection.commit()
+    except sqlite3.Error as e:
+        print(f"Errore SQL Save Last Update: {e}")
+    finally:
+        connection.close()
