@@ -40,10 +40,28 @@ class FasciaOraria:
             self.stato = stato
     
     def add_assegnazione(self, assegnazione: AssegnazioneTurno):
+        # VINCOLO: massimo numero oss per turno
+        if self.tipo == TipoFascia.MATTINA and len(self.assegnazioni) >=7:
+            print("Errore: nel turno sono già presenti 7 oss")
+            return False
+        elif self.tipo == TipoFascia.POMERIGGIO and len(self.assegnazioni) >= 6:
+            print("Errore: nel turno sono già presenti 6 oss")
+            return False
+        elif self.tipo == TipoFascia.NOTTE and len(self.assegnazioni) >= 2:
+            print("Errore: nel turno sono già presenti 2 oss")
+            return False
+
         # VINCOLO: Il turno breve è applicabile solo alla fascia MATTINA
         if assegnazione.turnoBreve and self.tipo != TipoFascia.MATTINA:
             print(f"Errore: Il turno breve non può essere assegnato alla fascia {self.tipo.value}. È valido solo per MATTINA.")
             return False
+
+        # VINCOLO: È consentito al massimo un turno breve per fascia (già limitato a MATTINA dal check sopra)
+        if assegnazione.turnoBreve:
+            for a in self.assegnazioni:
+                if a.turnoBreve:
+                    print(f"Errore: Limite raggiunto. È già presente un turno breve assegnato a {a.dipendente.nome} {a.dipendente.cognome}.")
+                    return False
 
         # Verifichiamo che la fascia oraria abbia un ID (sia salvata su DB) prima di salvare l'assegnazione
         if getattr(self, 'id_turno', None) is None:

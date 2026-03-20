@@ -171,3 +171,30 @@ class InterfacciaDirigente:
 
         # Per semplicità ora passiamo piano 0 e booleani False, in futuro si possono chiedere con input
         self.turnazione.assegna_turno(self.sistema_dipendenti, int(id_dipendente), dt_turno, tipo_fascia, piano=0, jolly=False, turno_breve=False)
+    
+
+    def print_turni_dip(self):
+        input_str = input("inserisci la settimana di cui vuoi vedere i turni del dipendente (anno settimana, es: 2025 2): ")
+        
+        try:
+            parti = input_str.split()
+            if len(parti) != 2:
+                raise ValueError
+            anno = int(parti[0])
+            settimana = int(parti[1])
+            settimana_key = (anno, settimana)
+        except ValueError:
+            print("Formato non valido. Inserire 'Anno Settimana' (es. 2025 5)")
+            return
+        
+
+        id_dipendente = input("su quale dipendente vuoi vedere i turni?")
+
+        if not id_dipendente.isdigit():
+            print("Errore: L'ID deve essere un numero intero.")
+            return
+
+        turn = self.turnazione.get_assegnazioni_dipendente(settimana_key, int(id_dipendente))
+
+        for t in turn:
+            print(t[0].data_turno, t[0].tipo, t[1].dipendente.nome, t[1].dipendente.cognome, t[1].piano, t[1].jolly, t[1].turnoBreve)

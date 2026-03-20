@@ -25,7 +25,7 @@ def main():
     action = -1
 
     while action != 0:
-        print("\n\nScegli l'azione da eseguire:\n0.Esci\n1.Visualizza dipendenti\n2.Aggiungi dipendente\n3.Rimuovi dipendente\n4.Modifica dipendente\n5.Visualizza assenze\n6.Aggiungi assenza\n7.Visualizza turnazione\n8.Aggiungi turno e assegnazione\n")
+        print("\n\nScegli l'azione da eseguire:\n0.Esci\n1.Visualizza dipendenti\n2.Aggiungi dipendente\n3.Rimuovi dipendente\n4.Modifica dipendente\n5.Visualizza assenze\n6.Aggiungi assenza\n7.Visualizza turnazione\n8.Aggiungi turno e assegnazione\n9.Visualizza turni dipendente\n")
         action = int(input())
         print("\n")
         if action == 1:
@@ -44,6 +44,8 @@ def main():
             interfaccia.print_turni()
         elif action == 8:
             interfaccia.aggiungi_turno()
+        elif action == 9:
+            interfaccia.print_turni_dip()
 
 if __name__ == '__main__':
     main()
