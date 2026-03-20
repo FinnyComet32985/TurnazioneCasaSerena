@@ -1,15 +1,21 @@
 import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QLabel, QPushButton, QStackedWidget, QListWidget
+    QLabel, QPushButton, QStackedWidget
 )
 from PyQt6.QtCore import Qt
+
+# Importiamo le viste
+from interfacciaGrafica.views.turni_view import TurniView
+from interfacciaGrafica.views.personale_view import PersonaleView
+from interfacciaGrafica.views.impostazioni_view import ImpostazioniView
+
 
 class MainWindow(QMainWindow):
     def __init__(self, interfaccia):
         super().__init__()
         
-        # Salviamo l'istanza del backend (simile a iniettare un Context in React o passarlo nei Props)
+        # Salviamo l'istanza del backend
         self.interfaccia = interfaccia
         
         self.setWindowTitle("Turnazione Casa Serena")
@@ -50,7 +56,7 @@ class MainWindow(QMainWindow):
         self.btn_turni = QPushButton("📅 Turnazione")
         self.btn_turni.setObjectName("sidebar_btn_active")
         self.btn_turni.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_turni.clicked.connect(lambda: self.switch_page(0)) # Come un onClick in React
+        self.btn_turni.clicked.connect(lambda: self.switch_page(0))
         
         # Voce Menu 2 - Personale
         self.btn_personale = QPushButton("👥 Gestione Personale")
@@ -69,23 +75,14 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.btn_impostazioni)
         sidebar_layout.addStretch() 
         
-        # --- CONTENUTO PRINCIPALE (Il vero e proprio "Router Outlet") ---
+        # --- CONTENUTO PRINCIPALE ---
         self.main_content = QStackedWidget()
         self.main_content.setObjectName("main_content")
         
-        # --- Pagina 0: Turnazione ---
-        self.page_turni = QWidget()
-        self._setup_page_turni()
-        
-        # --- Pagina 1: Gestione Personale ---
-        self.page_personale = QWidget()
-        self._setup_page_personale()
-        
-        # --- Pagina 2: Impostazioni ---
-        self.page_impostazioni = QWidget()
-        temp_layout = QVBoxLayout(self.page_impostazioni)
-        temp_layout.addWidget(QLabel("Pagina in costruzione..."))
-        temp_layout.addStretch()
+        # Carichiamo le viste isolate nei moduli separati
+        self.page_turni = TurniView(self.interfaccia)
+        self.page_personale = PersonaleView(self.interfaccia)
+        self.page_impostazioni = ImpostazioniView(self.interfaccia)
 
         self.main_content.addWidget(self.page_turni)
         self.main_content.addWidget(self.page_personale)
@@ -97,95 +94,13 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.sidebar)
         main_layout.addWidget(self.main_content)
         
-    def _setup_page_turni(self):
-        page_turni_layout = QVBoxLayout(self.page_turni)
-        page_turni_layout.setContentsMargins(40, 40, 40, 40)
-        
-        title_turni = QLabel("Turnazione - Settimana Corrente")
-        title_turni.setObjectName("page_title")
-        subtitle_turni = QLabel("Gestisci e visualizza i turni degli operatori.")
-        subtitle_turni.setObjectName("page_subtitle")
-        
-        card_widget = QWidget()
-        card_widget.setObjectName("card_container")
-        card_layout = QVBoxLayout(card_widget)
-        placeholder_label = QLabel("Stiamo preparando la griglia da Figma...")
-        placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        card_layout.addWidget(placeholder_label)
-
-        page_turni_layout.addWidget(title_turni)
-        page_turni_layout.addWidget(subtitle_turni)
-        page_turni_layout.addSpacing(20)
-        page_turni_layout.addWidget(card_widget)
-        page_turni_layout.addStretch()
-
-    def _setup_page_personale(self):
-        page_layout = QVBoxLayout(self.page_personale)
-        page_layout.setContentsMargins(40, 40, 40, 40)
-        
-        title = QLabel("Gestione Personale")
-        title.setObjectName("page_title")
-        subtitle = QLabel("Visualizza e gestisci l'anagrafica dei dipendenti")
-        subtitle.setObjectName("page_subtitle")
-        
-        card_widget = QWidget()
-        card_widget.setObjectName("card_container")
-        card_layout = QVBoxLayout(card_widget)
-        
-        # Usiamo un QListWidget per simulare una lista/tabella semplicissima.
-        self.lista_ui = QListWidget()
-        self.lista_ui.setStyleSheet("""
-            QListWidget {
-                border: none;
-                background-color: transparent;
-                font-size: 16px;
-                color: #0f172a; /* Testo scuro */
-            }
-            QListWidget::item {
-                padding: 12px;
-                border-bottom: 1px solid #f1f5f9;
-            }
-            QListWidget::item:hover {
-                background-color: #f8fafc;
-            }
-        """)
-        
-        card_layout.addWidget(self.lista_ui)
-        
-        self.aggiorna_lista_dipendenti()
-
-        page_layout.addWidget(title)
-        page_layout.addWidget(subtitle)
-        page_layout.addSpacing(20)
-        page_layout.addWidget(card_widget)
-
-    def aggiorna_lista_dipendenti(self):
-        self.lista_ui.clear() # Cancella gli elementi vecchi
-        
-        if self.interfaccia is None:
-            self.lista_ui.addItem("Errore: Backend scollegato.")
-            return
-            
-        dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
-        if not dipendenti:
-            self.lista_ui.addItem("Nessun dipendente a sistema.")
-            return
-            
-        for dip in dipendenti:
-            # Creiamo la riga
-            testo = f"👤 {dip.id_dipendente} - {dip.nome} {dip.cognome}     (Stato: {dip.stato.name})"
-            self.lista_ui.addItem(testo)
-
     def switch_page(self, index):
-        # Cambia il componente visibile
         self.main_content.setCurrentIndex(index)
         
-        # Cambiamo la classe css del bottone attivo (React: className={isActive ? 'active' : ''})
         self.btn_turni.setObjectName("sidebar_btn_active" if index == 0 else "sidebar_btn")
         self.btn_personale.setObjectName("sidebar_btn_active" if index == 1 else "sidebar_btn")
         self.btn_impostazioni.setObjectName("sidebar_btn_active" if index == 2 else "sidebar_btn")
         
-        # Forza il ridisegno dei bottoni per ricaricare il nome della classe dal QSS
         for btn in [self.btn_turni, self.btn_personale, self.btn_impostazioni]:
             btn.style().unpolish(btn)
             btn.style().polish(btn)
@@ -251,6 +166,5 @@ class MainWindow(QMainWindow):
                 background-color: #ffffff;
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
-                min-height: 400px;
             }
         """)
