@@ -165,21 +165,19 @@ class MainWindow(QMainWindow):
                 padding: 15px 25px;
                 font-size: 14px;
                 font-weight: 600;
-                border-left: 4px solid transparent;
             }
             QPushButton#sidebar_btn:hover {
                 background-color: #3F4244;
                 color: #ffffff;
             }
             QPushButton#sidebar_btn_active {
-                background-color: #242729;
+                background-color: #3F4244;
                 color: #ffffff;
                 border: none;
                 text-align: left;
                 padding: 15px 25px;
                 font-size: 14px;
                 font-weight: 600;
-                border-left: 4px solid #3b82f6;
             }
             #main_content {
                 background-color: #F8FAFB;
