@@ -108,63 +108,61 @@ class MainWindow(QMainWindow):
     def apply_styles(self):
         self.setStyleSheet("""
             * {
-                font-family: 'Segoe UI', Arial, sans-serif;
+                font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
             }
             #sidebar {
-                background-color: #1e293b;
-                border-right: 1px solid #0f172a;
+                background-color: #2E3132;
+                border-right: 1px solid #D1D5DB;
             }
             #logo_container {
-                background-color: #0f172a;
-                min-height: 80px;
-                max-height: 80px;
-                border-bottom: 1px solid #334155;
+                background-color: #2E3132;
+                min-height: 100px;
+                max-height: 100px;
             }
             #logo_text {
                 color: #ffffff;
-                font-size: 20px;
-                font-weight: bold;
+                font-size: 22px;
+                font-weight: 800;
+                letter-spacing: 1px;
             }
             QPushButton#sidebar_btn {
                 background-color: transparent;
-                color: #94a3b8;
+                color: #94A3B8;
                 border: none;
                 text-align: left;
-                padding: 15px 20px;
-                font-size: 15px;
-                font-weight: 500;
-                border-left: 4px solid transparent;
+                padding: 15px 25px;
+                font-size: 14px;
+                font-weight: 600;
             }
             QPushButton#sidebar_btn:hover {
-                background-color: #334155;
+                background-color: #3F4244;
                 color: #ffffff;
             }
             QPushButton#sidebar_btn_active {
-                background-color: #0f172a;
-                color: #3b82f6;
+                background-color: #3F4244;
+                color: #ffffff;
                 border: none;
                 text-align: left;
-                padding: 15px 20px;
-                font-size: 15px;
-                font-weight: bold;
-                border-left: 4px solid #3b82f6;
+                padding: 15px 25px;
+                font-size: 14px;
+                font-weight: 600;
             }
             #main_content {
-                background-color: #f8fafc;
+                background-color: #F8FAFB;
             }
             #page_title {
-                color: #0f172a;
-                font-size: 28px;
+                color: #191C1D;
+                font-size: 32px;
                 font-weight: bold;
             }
             #page_subtitle {
-                color: #64748b;
-                font-size: 15px;
+                color: #424752;
+                font-size: 16px;
                 margin-top: 5px;
             }
             #card_container {
                 background-color: #ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
+                border: 1px solid #ECEEEF;
+                border-radius: 12px;
             }
         """)
