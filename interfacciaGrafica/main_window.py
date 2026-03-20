@@ -45,35 +45,65 @@ class MainWindow(QMainWindow):
         logo_container.setObjectName("logo_container")
         logo_layout = QVBoxLayout(logo_container)
         
-        logo_label = QLabel("Casa Serena")
+        logo_label = QLabel("CASA\nSERENA")
         logo_label.setObjectName("logo_text")
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        sub_logo_label = QLabel("Gestione Turni")
+        sub_logo_label.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: normal;")
+
         logo_layout.addWidget(logo_label)
+        logo_layout.addWidget(sub_logo_label)
+        logo_layout.setContentsMargins(25, 20, 20, 20)
+        logo_layout.setSpacing(2)
         
         sidebar_layout.addWidget(logo_container)
         
-        # Voce Menu 1 - Turnazione
-        self.btn_turni = QPushButton("📅 Turnazione")
-        self.btn_turni.setObjectName("sidebar_btn_active")
-        self.btn_turni.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_turni.clicked.connect(lambda: self.switch_page(0))
+        # Dashboard
+        self.btn_dash = QPushButton("  ⊞  Dashboard")
+        self.btn_dash.setObjectName("sidebar_btn")
+        self.btn_dash.setCursor(Qt.CursorShape.PointingHandCursor)
         
-        # Voce Menu 2 - Personale
-        self.btn_personale = QPushButton("👥 Gestione Personale")
-        self.btn_personale.setObjectName("sidebar_btn")
+        # Dipendenti
+        self.btn_personale = QPushButton("  👥  Dipendenti")
+        self.btn_personale.setObjectName("sidebar_btn_active")
         self.btn_personale.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_personale.clicked.connect(lambda: self.switch_page(1))
 
-        # Voce Menu 3 - Impostazioni
-        self.btn_impostazioni = QPushButton("⚙️ Impostazioni")
+        # Turnazione
+        self.btn_turni = QPushButton("  📅  Turnazione")
+        self.btn_turni.setObjectName("sidebar_btn")
+        self.btn_turni.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_turni.clicked.connect(lambda: self.switch_page(0))
+
+        # Rapporti
+        self.btn_rapporti = QPushButton("  📊  Rapporti")
+        self.btn_rapporti.setObjectName("sidebar_btn")
+        self.btn_rapporti.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        # Impostazioni
+        self.btn_impostazioni = QPushButton("  ⚙️  Impostazioni")
         self.btn_impostazioni.setObjectName("sidebar_btn")
         self.btn_impostazioni.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_impostazioni.clicked.connect(lambda: self.switch_page(2))
 
-        sidebar_layout.addWidget(self.btn_turni)
+        sidebar_layout.addWidget(self.btn_dash)
         sidebar_layout.addWidget(self.btn_personale)
+        sidebar_layout.addWidget(self.btn_turni)
+        sidebar_layout.addWidget(self.btn_rapporti)
         sidebar_layout.addWidget(self.btn_impostazioni)
+
         sidebar_layout.addStretch() 
+
+        # Bottom section
+        self.btn_supporto = QPushButton("  ❓  Supporto")
+        self.btn_supporto.setObjectName("sidebar_btn")
+        self.btn_esci = QPushButton("  🚪  Esci")
+        self.btn_esci.setObjectName("sidebar_btn")
+
+        sidebar_layout.addWidget(self.btn_supporto)
+        sidebar_layout.addWidget(self.btn_esci)
+        sidebar_layout.addSpacing(20)
         
         # --- CONTENUTO PRINCIPALE ---
         self.main_content = QStackedWidget()
@@ -100,71 +130,73 @@ class MainWindow(QMainWindow):
         self.btn_turni.setObjectName("sidebar_btn_active" if index == 0 else "sidebar_btn")
         self.btn_personale.setObjectName("sidebar_btn_active" if index == 1 else "sidebar_btn")
         self.btn_impostazioni.setObjectName("sidebar_btn_active" if index == 2 else "sidebar_btn")
+        self.btn_dash.setObjectName("sidebar_btn")
+        self.btn_rapporti.setObjectName("sidebar_btn")
         
-        for btn in [self.btn_turni, self.btn_personale, self.btn_impostazioni]:
+        for btn in [self.btn_turni, self.btn_personale, self.btn_impostazioni, self.btn_dash, self.btn_rapporti]:
             btn.style().unpolish(btn)
             btn.style().polish(btn)
         
     def apply_styles(self):
         self.setStyleSheet("""
             * {
-                font-family: 'Segoe UI', Arial, sans-serif;
+                font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
             }
             #sidebar {
-                background-color: #1e293b;
-                border-right: 1px solid #0f172a;
+                background-color: #2E3132;
+                border-right: 1px solid #D1D5DB;
             }
             #logo_container {
-                background-color: #0f172a;
-                min-height: 80px;
-                max-height: 80px;
-                border-bottom: 1px solid #334155;
+                background-color: #2E3132;
+                min-height: 100px;
+                max-height: 100px;
             }
             #logo_text {
                 color: #ffffff;
-                font-size: 20px;
-                font-weight: bold;
+                font-size: 22px;
+                font-weight: 800;
+                letter-spacing: 1px;
             }
             QPushButton#sidebar_btn {
                 background-color: transparent;
-                color: #94a3b8;
+                color: #94A3B8;
                 border: none;
                 text-align: left;
-                padding: 15px 20px;
-                font-size: 15px;
-                font-weight: 500;
+                padding: 15px 25px;
+                font-size: 14px;
+                font-weight: 600;
                 border-left: 4px solid transparent;
             }
             QPushButton#sidebar_btn:hover {
-                background-color: #334155;
+                background-color: #3F4244;
                 color: #ffffff;
             }
             QPushButton#sidebar_btn_active {
-                background-color: #0f172a;
-                color: #3b82f6;
+                background-color: #242729;
+                color: #ffffff;
                 border: none;
                 text-align: left;
-                padding: 15px 20px;
-                font-size: 15px;
-                font-weight: bold;
+                padding: 15px 25px;
+                font-size: 14px;
+                font-weight: 600;
                 border-left: 4px solid #3b82f6;
             }
             #main_content {
-                background-color: #f8fafc;
+                background-color: #F8FAFB;
             }
             #page_title {
-                color: #0f172a;
-                font-size: 28px;
+                color: #191C1D;
+                font-size: 32px;
                 font-weight: bold;
             }
             #page_subtitle {
-                color: #64748b;
-                font-size: 15px;
+                color: #424752;
+                font-size: 16px;
                 margin-top: 5px;
             }
             #card_container {
                 background-color: #ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
+                border: 1px solid #ECEEEF;
+                border-radius: 12px;
             }
         """)
