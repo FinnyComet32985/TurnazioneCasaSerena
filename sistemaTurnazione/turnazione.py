@@ -31,6 +31,8 @@ class Turnazione:
         "NOTTE": [21, 7]
     }
 
+    PAUSA_TRA_TURNI: int = 11
+
 
 
     def __init__(self, turnazioneSettimanale: dict[tuple[int, int], dict[date, dict[TipoFascia, FasciaOraria]]] | None = None):
@@ -142,7 +144,10 @@ class Turnazione:
 
         return [True, None]
 
-    def _check_riposo_11_ore(self, settimana_key: tuple[int, int], data_turno: date, tipo_fascia: TipoFascia, dipendente_obj: Dipendente, turno_breve: bool, piano: int, jolly: bool) -> bool:
+    def _check_max_mena_ore_settimanali(self):
+        pass
+
+    def _check_riposo_tra_turni(self, settimana_key: tuple[int, int], data_turno: date, tipo_fascia: TipoFascia, dipendente_obj: Dipendente, turno_breve: bool, piano: int, jolly: bool) -> bool:
         """
         Simula l'assegnazione e verifica che venga rispettato il vincolo delle 11 ore di riposo tra i turni.
         Restituisce True se il vincolo è rispettato, False altrimenti.
@@ -195,8 +200,8 @@ class Turnazione:
             # Calcoliamo la differenza tra Fine del Corrente e Inizio del Successivo
             delta = turno_successivo[0] - turno_corrente[1]
             
-            if delta < timedelta(hours=11):
-                print(f"Errore: Violazione riposo 11 ore. Tra {turno_corrente[2]} (fine {turno_corrente[1]}) e {turno_successivo[2]} (inizio {turno_successivo[0]}) passano solo {delta}.")
+            if delta < timedelta(hours=self.PAUSA_TRA_TURNI):
+                print(f"Errore: Violazione riposo {self.PAUSA_TRA_TURNI} ore. Tra {turno_corrente[2]} (fine {turno_corrente[1]}) e {turno_successivo[2]} (inizio {turno_successivo[0]}) passano solo {delta}.")
                 return False
         
         return True
@@ -222,12 +227,12 @@ class Turnazione:
         esito_ore, causa_nuovo = self._check_max_ore_settimanali(id_dipendente, settimana_key, tipo_fascia, turno_breve)
         if not esito_ore:
             if causa_nuovo:
-                print("Inserendo il nuovo turno si eccedono le ore settimanali consentite. La rimanente parte verrà considerata come straordinari.")
+                print("Inserendo il nuovo turno si eccedono le ore settimanali consentite. La rimanente parte verrà considerata come straordinari o finirà in banca ore.")
             else:
                 print("Attenzione: Il dipendente ha già superato il monte ore settimanale. Questo turno sarà interamente straordinario.")
 
         # Verifica vincolo 11 ore di riposo
-        if not self._check_riposo_11_ore(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly):
+        if not self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly):
             return False
 
         # Se tutti i controlli passano, procediamo con l'assegnazione reale
