@@ -42,7 +42,7 @@ class Turnazione:
     LIMITI_FASCIA: dict = {
         TipoFascia.MATTINA: 7,
         TipoFascia.POMERIGGIO: 6,
-        TipoFascia.NOTTE: 2
+        TipoFascia.NOTTE: 1
     }
 
     def __init__(self, turnazioneSettimanale: dict[tuple[int, int], dict[date, dict[TipoFascia, FasciaOraria]]] | None = None):
@@ -477,6 +477,23 @@ class Turnazione:
             self.assegna_turno(sistema_dipendenti, id_dipendente, data_domani, TipoFascia.RIPOSO, piano=None)
 
         return esito
+
+    def rimuovi_assegnazione(self, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia) -> bool:
+        anno, settimana, _ = data_turno.isocalendar()
+        settimana_key = (anno, settimana)
+        
+        fascia = self.turnazioneSettimanale.get(settimana_key, {}).get(data_turno, {}).get(tipo_fascia)
+        
+        if not fascia:
+            print("Fascia oraria non trovata.")
+            return False
+            
+        if fascia.stato == StatoFascia.APPROVATA:
+            print("Impossibile rimuovere assegnazione: La settimana è APPROVATA. Esegui prima 'Riapri Settimana'.")
+            return False
+
+        return fascia.remove_assegnazione(id_dipendente)
+
 
     def approva_settimana(self, sistema_dipendenti: SistemaDipendenti, settimana_key: tuple[int, int]) -> bool:
         """

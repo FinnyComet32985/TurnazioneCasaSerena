@@ -165,6 +165,21 @@ def delete_assenza(id_assenza: int) -> bool:
         connection.close()
     return success
 
+def remove_assegnazione_turno(id_turno: int, id_dipendente: int) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    query = "DELETE FROM lavora WHERE idTurno = ? AND idDipendente = ?"
+    success = False
+    try:
+        cursor.execute(query, (id_turno, id_dipendente))
+        connection.commit()
+        success = True
+    except sqlite3.Error as e:
+        print(f"Errore SQL Delete Assegnazione Turno: {e}")
+    finally:
+        connection.close()
+    return success
+
 def save_last_update(data: str):
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()

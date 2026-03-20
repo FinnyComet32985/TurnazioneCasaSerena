@@ -206,6 +206,36 @@ class InterfacciaDirigente:
         # Per semplicità ora passiamo piano 0 e booleani False, in futuro si possono chiedere con input
         self.turnazione.assegna_turno(self.sistema_dipendenti, int(id_dipendente), dt_turno, tipo_fascia, piano=0, jolly=False, turno_breve=False)
     
+    def rimuovi_turno(self):
+        data_turno = input("inserisci la data del turno da rimuovere (GG/MM/AAAA):")
+
+        try:
+            dt_turno = datetime.strptime(data_turno, "%d/%m/%Y").date()
+        except ValueError:
+            print("Formato data non valido.")
+            return
+
+        tipo_fascia_input = input("scegli il tipo di fascia:\n1.MATTINA\n2.POMERIGGIO\n3.NOTTE\n4.RIPOSO\n\n")
+
+        if tipo_fascia_input == "1":
+            tipo_fascia = TipoFascia.MATTINA
+        elif tipo_fascia_input == "2":
+            tipo_fascia = TipoFascia.POMERIGGIO
+        elif tipo_fascia_input == "3":
+            tipo_fascia = TipoFascia.NOTTE
+        else:
+            print("Scelta non valida")
+            return
+
+        id_dipendente = input("ID del dipendente da rimuovere dal turno: ")
+        if not id_dipendente.isdigit():
+            print("ID non valido")
+            return
+            
+        if self.turnazione.rimuovi_assegnazione(int(id_dipendente), dt_turno, tipo_fascia):
+            print("Assegnazione rimossa con successo.")
+        else:
+            print("Errore durante la rimozione (Verifica che il turno esista e non sia approvato).")
 
     def print_turni_dip(self):
         input_str = input("inserisci la settimana di cui vuoi vedere i turni del dipendente (anno settimana, es: 2025 2): ")

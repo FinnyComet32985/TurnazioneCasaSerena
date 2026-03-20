@@ -72,6 +72,15 @@ class FasciaOraria:
             self.assegnazioni.append(assegnazione)
             return True
         return False
+    
+    def remove_assegnazione(self, id_dipendente: int) -> bool:
+        # Verifica se l'assegnazione esiste
+        for i, ass in enumerate(self.assegnazioni):
+            if ass.dipendente.id_dipendente == id_dipendente:
+                if sistemaSalvataggio.remove_assegnazione_turno(self.id_turno, id_dipendente):
+                    self.assegnazioni.pop(i)
+                    return True
+        return False
 
     def ripristina_assegnazione(self, assegnazione: AssegnazioneTurno):
         """Aggiunge un'assegnazione alla lista in memoria senza salvare su DB."""
