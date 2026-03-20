@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 
 from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata, TipoAssenza
 from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
@@ -182,4 +182,19 @@ class SistemaDipendenti:
                 dip.banca_ore
             )
             return True
+        return False
+
+    def verifica_assenza(self, id_dipendente: int, data_check: date) -> bool:
+        """Restituisce True se il dipendente è in assenza (Ferie, Malattia, ecc.) nella data specificata."""
+        dip = self.get_dipendente(id_dipendente)
+        if not dip:
+            return False
+        
+        fmt = "%Y-%m-%d %H:%M:%S"
+        for assenza in dip.assenze_programmate:
+            # Conversione date stringa -> datetime -> date
+            dt_inizio = datetime.strptime(assenza.data_inizio, fmt).date()
+            dt_fine = datetime.strptime(assenza.data_fine, fmt).date()
+            if dt_inizio <= data_check <= dt_fine:
+                return True
         return False

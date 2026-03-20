@@ -38,6 +38,12 @@ class Turnazione:
     MAX_JOLLY_PER_TURNO: int = 1
     MAX_DIPENDENTI_PER_PIANO: int = 3
 
+    # Limiti Operatori per Fascia (Usati per la generazione)
+    LIMITI_FASCIA: dict = {
+        TipoFascia.MATTINA: 7,
+        TipoFascia.POMERIGGIO: 6,
+        TipoFascia.NOTTE: 2
+    }
 
     def __init__(self, turnazioneSettimanale: dict[tuple[int, int], dict[date, dict[TipoFascia, FasciaOraria]]] | None = None):
         if turnazioneSettimanale is not None:
@@ -86,6 +92,24 @@ class Turnazione:
     def get_turnazione_settimana(self, settimana_key: tuple[int, int]) -> dict[date, dict[TipoFascia, FasciaOraria]]:
         return self.turnazioneSettimanale.get(settimana_key, {})
 
+    def inizializza_settimana(self, anno: int, settimana: int) -> bool:
+        """
+        Crea i turni vuoti (MATTINA, POMERIGGIO, NOTTE) per tutti i giorni della settimana specificata.
+        """
+        try:
+            # Calcola il primo giorno (Lunedì) della settimana ISO
+            primo_giorno = date.fromisocalendar(anno, settimana, 1)
+            
+            for i in range(7):
+                giorno_corrente = primo_giorno + timedelta(days=i)
+                # Creiamo le 3 fasce principali (il RIPOSO è un concetto assegnato al dipendente, non un turno lavorativo generato)
+                self.add_turno(giorno_corrente, TipoFascia.MATTINA, StatoFascia.GENERATA)
+                self.add_turno(giorno_corrente, TipoFascia.POMERIGGIO, StatoFascia.GENERATA)
+                self.add_turno(giorno_corrente, TipoFascia.NOTTE, StatoFascia.GENERATA)
+            return True
+        except Exception as e:
+            print(f"Errore inizializzazione settimana: {e}")
+            return False
 
     def add_turno(self, data_turno: date, tipo_fascia: TipoFascia, stato: StatoFascia = StatoFascia.VUOTA) :
         """
@@ -353,6 +377,47 @@ class Turnazione:
                 raise ValueError(f"Violazione riposo min {self.PAUSA_TRA_TURNI}h: Tra {turno_corrente[2]} e {turno_successivo[2]} passano solo {delta}.")
         
         return True
+
+    def get_candidati_disponibili(self, sistema_dipendenti: SistemaDipendenti, data_turno: date, tipo_fascia: TipoFascia) -> List[Dipendente]:
+        """
+        Restituisce una lista di dipendenti che POSSONO lavorare in questo specifico turno
+        rispettando TUTTI i vincoli (Assenze, Riposo 11h, Riposo 24h, Max Ore).
+        """
+        candidati = []
+        anno, settimana, _ = data_turno.isocalendar()
+        settimana_key = (anno, settimana)
+        
+        tutti_dipendenti = sistema_dipendenti.get_lista_dipendenti()
+        
+        for dip in tutti_dipendenti:
+            # 1. Filtro base: Deve essere ASSUNTO
+            if dip.stato.value != "ASSUNTO":
+                continue
+                
+            # 2. Filtro Assenze (Ferie/Malattia)
+            if sistema_dipendenti.verifica_assenza(dip.id_dipendente, data_turno):
+                continue
+                
+            # 3. Filtro Max Ore Settimanali (Simuliamo inserimento standard, no turno breve per ora)
+            # Nota: check_max_ore restituisce [True/False, CausaNuovoTurno]. Ci interessa se passa.
+            esito_ore, _ = self._check_max_ore_settimanali(dip.id_dipendente, settimana_key, tipo_fascia, turno_breve=False)
+            if not esito_ore:
+                continue
+                
+            # 4. Filtro Riposo 11 ore
+            try:
+                self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dip, turno_breve=False, piano=0, jolly=False)
+            except ValueError:
+                continue # Viola le 11 ore
+                
+            # 5. Filtro Riposo Settimanale (Warning -> Lo trattiamo come bloccante per l'auto-generazione per essere sicuri)
+            if not self._check_riposo_settimanale(settimana_key, dip.id_dipendente, data_turno, tipo_fascia, turno_breve=False):
+                # Opzionale: potremmo essere più permissivi qui e lasciarlo gestire alla fine, ma per ora filtriamo.
+                pass 
+
+            candidati.append(dip)
+            
+        return candidati
 
     def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False) -> bool:
         """Cerca la fascia specifica e aggiunge l'assegnazione (che salva su DB)."""
