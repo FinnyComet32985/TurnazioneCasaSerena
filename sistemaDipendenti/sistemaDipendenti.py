@@ -90,3 +90,24 @@ class SistemaDipendenti:
             if dipendente.id_dipendente == id_dipendente:
                 return dipendente.get_assenze_programmate()
         return []
+
+    def modifica_dipendente(self, id_dipendente: int, nome: str, cognome: str, ferie: float, rol: float):
+        result = sistemaSalvataggio.update_dipendente(id_dipendente, nome, cognome, ferie, rol)
+        if result:
+            dip = self.get_dipendente(id_dipendente)
+            if dip:
+                dip.nome = nome
+                dip.cognome = cognome
+                dip.ferie_rimanenti = ferie
+                dip.rol_rimanenti = rol
+            return True
+        return False
+        
+    def rimuovi_assenza(self, id_dipendente: int, id_assenza: int):
+        result = sistemaSalvataggio.delete_assenza(id_assenza)
+        if result:
+            dip = self.get_dipendente(id_dipendente)
+            if dip:
+                dip.assenze_programmate = [a for a in dip.assenze_programmate if getattr(a, 'id_assenza', None) != id_assenza]
+            return True
+        return False

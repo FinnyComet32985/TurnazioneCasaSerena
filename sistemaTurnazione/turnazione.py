@@ -32,7 +32,10 @@ class Turnazione:
     }
 
     PAUSA_TRA_TURNI: int = 11
-
+    
+    # Costanti Vincoli Assegnazione
+    MAX_JOLLY_PER_TURNO: int = 1
+    MAX_DIPENDENTI_PER_PIANO: int = 3
 
 
     def __init__(self, turnazioneSettimanale: dict[tuple[int, int], dict[date, dict[TipoFascia, FasciaOraria]]] | None = None):
@@ -201,8 +204,7 @@ class Turnazione:
             delta = turno_successivo[0] - turno_corrente[1]
             
             if delta < timedelta(hours=self.PAUSA_TRA_TURNI):
-                print(f"Errore: Violazione riposo {self.PAUSA_TRA_TURNI} ore. Tra {turno_corrente[2]} (fine {turno_corrente[1]}) e {turno_successivo[2]} (inizio {turno_successivo[0]}) passano solo {delta}.")
-                return False
+                raise ValueError(f"Violazione riposo min {self.PAUSA_TRA_TURNI}h: Tra {turno_corrente[2]} e {turno_successivo[2]} passano solo {delta}.")
         
         return True
 
@@ -214,15 +216,23 @@ class Turnazione:
         fascia = self.turnazioneSettimanale.get(settimana_key, {}).get(data_turno, {}).get(tipo_fascia)
         
         if not fascia:
-            print("Errore: La fascia oraria specificata non esiste.")
-            return False
+            raise ValueError("La fascia oraria specificata non esiste in giornata.")
 
-        # Usiamo l'istanza di sistema_dipendenti che ci hai passato per ottenere l'oggetto
         dipendente_obj = sistema_dipendenti.get_dipendente(id_dipendente)
         if dipendente_obj is None:
-            print("Dipendente non trovato")
-            return False
+            raise ValueError("Dipendente non trovato a sistema.")
             
+        # Controlli Configurazione Limiti Operatori
+        if jolly:
+            jolly_count = sum(1 for a in fascia.assegnazioni if getattr(a, 'jolly', False))
+            if jolly_count >= self.MAX_JOLLY_PER_TURNO:
+                raise ValueError(f"Limite massimo di {self.MAX_JOLLY_PER_TURNO} Jolly raggiunto per questo turno.")
+
+        if piano is not None:
+            piano_count = sum(1 for a in fascia.assegnazioni if getattr(a, 'piano', None) == piano)
+            if piano_count >= self.MAX_DIPENDENTI_PER_PIANO:
+                raise ValueError(f"Limite di {self.MAX_DIPENDENTI_PER_PIANO} dipendenti per il piano {piano} raggiunto.")
+
         # Controllo vincolo ore massime settimanali
         esito_ore, causa_nuovo = self._check_max_ore_settimanali(id_dipendente, settimana_key, tipo_fascia, turno_breve)
         if not esito_ore:
@@ -232,11 +242,13 @@ class Turnazione:
                 print("Attenzione: Il dipendente ha già superato il monte ore settimanale. Questo turno sarà interamente straordinario.")
 
         # Verifica vincolo 11 ore di riposo
-        if not self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly):
-            return False
+        self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly)
 
         # Se tutti i controlli passano, procediamo con l'assegnazione reale
+        # L'assegnazione chiama database che se bloccata (es per Trigger Assenze) restituirà False
         esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly))
+        if not esito:
+            raise ValueError("Assegnazione bloccata dal database. Il dipendente potrebbe essere in Ferie/Malattia in questa data.")
 
         # AUTOMATISMO: Se è un turno di NOTTE, assegna automaticamente RIPOSO il giorno dopo
         if esito and tipo_fascia == TipoFascia.NOTTE:

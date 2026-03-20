@@ -120,3 +120,33 @@ def save_assegnazione(id_turno: int, assegnazione: AssegnazioneTurno) -> bool:
         return False
     finally:
         connection.close()
+
+def update_dipendente(id_dipendente: int, nome: str, cognome: str, ferie: float, rol: float) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    query = "UPDATE dipendente SET nome=?, cognome=?, ferieRimanenti=?, rolRimanenti=? WHERE idDipendente=?"
+    success = False
+    try:
+        cursor.execute(query, (nome, cognome, ferie, rol, id_dipendente))
+        connection.commit()
+        success = True
+    except sqlite3.Error as e:
+        print(f"Errore SQL Update Dipendente: {e}")
+    finally:
+        connection.close()
+    return success
+
+def delete_assenza(id_assenza: int) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    query = "DELETE FROM assenza WHERE idAssenza = ?"
+    success = False
+    try:
+        cursor.execute(query, (id_assenza,))
+        connection.commit()
+        success = True
+    except sqlite3.Error as e:
+        print(f"Errore SQL Delete Assenza: {e}")
+    finally:
+        connection.close()
+    return success
