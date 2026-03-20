@@ -20,6 +20,7 @@ class AssignTurnoDialog(QDialog):
         
         layout.addWidget(QLabel("Seleziona il Dipendente:"))
         self.combo = QComboBox()
+        self.combo.setStyleSheet("color: #0f172a; background-color: white; border: 1px solid #cbd5e1; padding: 4px;")
         for dip in dipendenti:
             # Opzionale: filtrare solo quelli 'ASSUNTI'
             if dip.stato.name == "ASSUNTO":
@@ -60,12 +61,14 @@ class TurniView(QWidget):
         header_layout = QHBoxLayout()
         header_layout.addWidget(QLabel("Anno:"))
         self.spin_anno = QSpinBox()
+        self.spin_anno.setStyleSheet("color: #0f172a; background-color: white; border: 1px solid #cbd5e1; padding: 4px;")
         self.spin_anno.setRange(2020, 2050)
         self.spin_anno.setValue(datetime.now().year)
         header_layout.addWidget(self.spin_anno)
         
         header_layout.addWidget(QLabel("Settimana:"))
         self.spin_sett = QSpinBox()
+        self.spin_sett.setStyleSheet("color: #0f172a; background-color: white; border: 1px solid #cbd5e1; padding: 4px;")
         self.spin_sett.setRange(1, 53)
         self.spin_sett.setValue(datetime.now().isocalendar()[1])
         header_layout.addWidget(self.spin_sett)
@@ -177,7 +180,7 @@ class TurniView(QWidget):
         dt_turno = self.date_rows[row]
         item = self.table.item(row, col)
         
-        if item and "+ Vuoto" in item.text(): # Puoi renderlo più smart se vuoi permettere l'aggiunta multipla, per ora 1 a fascia va bene.
+        if item: # Rimosso il limite '+ Vuoto', ora puoi cliccare una cella piena per aggiungere dipendenti
             dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
             dialog = AssignTurnoDialog(dipendenti, dt_turno, tipo_fascia.value, self)
             if dialog.exec() and dialog.id_scelto is not None:
