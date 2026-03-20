@@ -412,8 +412,8 @@ class Turnazione:
                 
             # 5. Filtro Riposo Settimanale (Warning -> Lo trattiamo come bloccante per l'auto-generazione per essere sicuri)
             if not self._check_riposo_settimanale(settimana_key, dip.id_dipendente, data_turno, tipo_fascia, turno_breve=False):
-                # Opzionale: potremmo essere più permissivi qui e lasciarlo gestire alla fine, ma per ora filtriamo.
-                pass 
+                # Bloccante per la generazione automatica per garantire il rispetto del vincolo
+                continue
 
             candidati.append(dip)
             
@@ -577,7 +577,6 @@ class Turnazione:
                 sistemaSalvataggio.update_stato_turno(fascia.id_turno, StatoFascia.MODIFICATA.value)
 
         return True
-
 
     def get_assegnazioni_dipendente(self, info_settimana: tuple[int, int] | dict, id_dipendente: int) -> List[list]:
         assegnazioni = []

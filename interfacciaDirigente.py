@@ -7,6 +7,7 @@ from sistemaTurnazione import assegnazioneTurno
 from sistemaTurnazione import turnazione
 from sistemaTurnazione.fasciaOraria import TipoFascia
 from sistemaTurnazione.turnazione import Turnazione
+from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
 
 
 class InterfacciaDirigente:
@@ -141,6 +142,21 @@ class InterfacciaDirigente:
             if confirm.lower() == 's':
                 if self.turnazione.riapri_settimana(self.sistema_dipendenti, settimana_key):
                     print("Settimana riaperta. Ora puoi modificarla.")
+        except ValueError:
+            print("Formato non valido.")
+
+    def genera_turnazione(self):
+        """
+        Comando per generare automaticamente la turnazione.
+        """
+        input_str = input("Inserisci la settimana da GENERARE (anno settimana, es: 2025 2): ")
+        try:
+            parti = input_str.split()
+            if len(parti) != 2: raise ValueError
+            anno, settimana = int(parti[0]), int(parti[1])
+
+            generatore = SistemaGenerazione(self.turnazione, self.sistema_dipendenti)
+            generatore.genera_turnazione_automatica(anno, settimana)
         except ValueError:
             print("Formato non valido.")
 

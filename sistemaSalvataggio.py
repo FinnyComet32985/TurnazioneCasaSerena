@@ -191,3 +191,22 @@ def save_last_update(data: str):
         print(f"Errore SQL Save Last Update: {e}")
     finally:
         connection.close()
+
+def get_data_ultimo_turno(id_dipendente: int, tipo_fascia: str) -> str | None:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    query = """
+        SELECT MAX(t.dataTurno) 
+        FROM lavora l
+        JOIN turno t ON l.idTurno = t.idTurno
+        WHERE l.idDipendente = ? AND t.fasciaOraria = ?
+    """
+    try:
+        cursor.execute(query, (id_dipendente, tipo_fascia))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except sqlite3.Error as e:
+        print(f"Errore SQL get_data_ultimo_turno: {e}")
+        return None
+    finally:
+        connection.close()
