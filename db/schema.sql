@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS dipendente (
     cognome TEXT NOT NULL,
     ferieRimanenti REAL NOT NULL,
     rolRimanenti REAL NOT NULL,
+    bancaOre REAL NOT NULL DEFAULT 0,
     stato VARCHAR(11) CHECK(stato IN ('ASSUNTO', 'LICENZIATO')) NOT NULL DEFAULT 'ASSUNTO'
 );
 

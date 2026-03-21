@@ -3,7 +3,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QStackedWidget
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import Qt, QSize
 
 # Importiamo le viste
 from interfacciaGrafica.views.turni_view import TurniView
@@ -45,29 +46,40 @@ class MainWindow(QMainWindow):
         logo_container.setObjectName("logo_container")
         logo_layout = QVBoxLayout(logo_container)
         
-        logo_label = QLabel("Casa Serena")
-        logo_label.setObjectName("logo_text")
+        # Creiamo un QLabel per contenere l'immagine del logo
+        logo_label = QLabel()
+        # Assicurati di avere un file logo.png (o altro formato) nel percorso specificato
+        pixmap = QPixmap("./interfacciaGrafica/assets/logo.svg")
+        logo_label.setPixmap(pixmap)
+        logo_label.setScaledContents(True) # Permette all'immagine di scalare con il QLabel
+        logo_label.setFixedHeight(60) # Impostiamo un'altezza fissa per il logo
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_layout.addWidget(logo_label)
         
         sidebar_layout.addWidget(logo_container)
         
-        # Voce Menu 1 - Turnazione
-        self.btn_turni = QPushButton("📅 Turnazione")
-        self.btn_turni.setObjectName("sidebar_btn_active")
-        self.btn_turni.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_turni.clicked.connect(lambda: self.switch_page(0))
-        
-        # Voce Menu 2 - Personale
-        self.btn_personale = QPushButton("👥 Gestione Personale")
+        # Voce Menu 1 - Personale
+        self.btn_personale = QPushButton("  Dipendenti")
         self.btn_personale.setObjectName("sidebar_btn")
         self.btn_personale.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_personale.setIcon(QIcon("./interfacciaGrafica/assets/people.svg"))
+        self.btn_personale.setIconSize(QSize(24, 24))
         self.btn_personale.clicked.connect(lambda: self.switch_page(1))
 
+        # Voce Menu 2 - Turnazione
+        self.btn_turni = QPushButton("  Turnazione")
+        self.btn_turni.setObjectName("sidebar_btn_active")
+        self.btn_turni.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_turni.setIcon(QIcon("./interfacciaGrafica/assets/calendar.svg"))
+        self.btn_turni.setIconSize(QSize(24, 24))
+        self.btn_turni.clicked.connect(lambda: self.switch_page(0))
+
         # Voce Menu 3 - Impostazioni
-        self.btn_impostazioni = QPushButton("⚙️ Impostazioni")
+        self.btn_impostazioni = QPushButton("  Impostazioni")
         self.btn_impostazioni.setObjectName("sidebar_btn")
         self.btn_impostazioni.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_impostazioni.setIcon(QIcon("./interfacciaGrafica/assets/settings.svg"))
+        self.btn_impostazioni.setIconSize(QSize(24, 24))
         self.btn_impostazioni.clicked.connect(lambda: self.switch_page(2))
 
         sidebar_layout.addWidget(self.btn_turni)
@@ -119,11 +131,7 @@ class MainWindow(QMainWindow):
                 min-height: 80px;
                 max-height: 80px;
                 border-bottom: 1px solid #334155;
-            }
-            #logo_text {
-                color: #ffffff;
-                font-size: 20px;
-                font-weight: bold;
+                padding
             }
             QPushButton#sidebar_btn {
                 background-color: transparent;
