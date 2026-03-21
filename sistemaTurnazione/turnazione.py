@@ -34,22 +34,51 @@ class Turnazione:
     PAUSA_TRA_TURNI: int = 11
     RIPOSO_SETTIMANALE_MIN: int = 24 # Ore consecutive
     
-    # Costanti Vincoli Assegnazione
-    MAX_JOLLY_PER_TURNO: int = 1
-    MAX_DIPENDENTI_PER_PIANO: int = 3
-
-    # Limiti Operatori per Fascia (Usati per la generazione)
-    LIMITI_FASCIA: dict = {
-        TipoFascia.MATTINA: 7,
-        TipoFascia.POMERIGGIO: 6,
-        TipoFascia.NOTTE: 1
-    }
+    # Variabili Configurazione (Inizializzate nel costruttore)
+    max_jolly_per_turno: int
+    max_dipendenti_per_piano: int
+    limiti_fascia: dict
 
     def __init__(self, turnazioneSettimanale: dict[tuple[int, int], dict[date, dict[TipoFascia, FasciaOraria]]] | None = None):
         if turnazioneSettimanale is not None:
             self.turnazioneSettimanale = turnazioneSettimanale
         else:
             self.turnazioneSettimanale = {}
+        
+        # Configurazione Default (inizializzata in memoria per evitare query DB in loop)
+        self.max_jolly_per_turno = 1
+        self.max_dipendenti_per_piano = 3
+        self.limiti_fascia = {
+            TipoFascia.MATTINA: 7,
+            TipoFascia.POMERIGGIO: 6,
+            TipoFascia.NOTTE: 1
+        }
+
+    def load_configuration(self):
+        """Carica i parametri di configurazione dal DB o imposta i default."""
+        # Jolly
+        val = sistemaSalvataggio.get_config('max_jolly')
+        self.max_jolly_per_turno = int(val) if val else 1
+        
+        # Piano
+        val = sistemaSalvataggio.get_config('max_piano')
+        self.max_dipendenti_per_piano = int(val) if val else 3
+
+        # Limiti Fascia
+        self.limiti_fascia = {}
+        # Default values
+        defaults = {
+            TipoFascia.MATTINA: 7,
+            TipoFascia.POMERIGGIO: 6,
+            TipoFascia.NOTTE: 1
+        }
+        
+        for tf in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE]:
+            val = sistemaSalvataggio.get_config(f'limit_{tf.value}')
+            if val:
+                self.limiti_fascia[tf] = int(val)
+            else:
+                self.limiti_fascia[tf] = defaults.get(tf, 0)
     
     # loading dei turni del DB
     def ripristina_fascia(self, id_turno: int, data_str: str, tipo_fascia_str: str, stato_str: str):
@@ -115,15 +144,19 @@ class Turnazione:
         """
         Aggiunge una nuova fascia oraria alla turnazione, salvandola prima nel database.
         """
+        anno, settimana_iso, _ = data_turno.isocalendar()
+        settimana_key = (anno, settimana_iso)
+
+        # Controllo anticipato: se la fascia esiste già in memoria, non la ricreiamo nel DB.
+        if tipo_fascia in self.turnazioneSettimanale.get(settimana_key, {}).get(data_turno, {}):
+            return settimana_key
+
         # 1. Salva il turno nel database e ottieni l'ID
         id_turno_db = sistemaSalvataggio.save_turno(data_turno, tipo_fascia.value, stato.value)
 
         if id_turno_db is None:
             print(f"Errore: Impossibile salvare il turno per {data_turno} {tipo_fascia.value} nel database.")
             return False
-
-        anno, settimana_iso, _ = data_turno.isocalendar()
-        settimana_key = (anno, settimana_iso)
 
         # 2. Crea l'oggetto FasciaOraria con l'ID ottenuto
         fascia_oraria = FasciaOraria(
@@ -228,9 +261,6 @@ class Turnazione:
             
         return True
 
-    def _check_max_mena_ore_settimanali(self):
-        pass
-
     def _check_riposo_settimanale(self, settimana_key: tuple[int, int], id_dipendente: int, data_nuovo_turno: date, tipo_nuovo_turno: TipoFascia, turno_breve: bool) -> bool:
         """
         Verifica se esiste almeno un periodo di riposo di 24h consecutive associato alla settimana di lavoro,
@@ -301,13 +331,22 @@ class Turnazione:
         if not turni_prec:
             return True # Se la settimana prima non ha lavorato, ha avuto riposo.
         
-        # Trova l'ultimo turno della settimana precedente
-        ultimo_turno_prec = max(turni_prec, key=lambda item: item[0].data_turno)
-        fine_ultimo_turno_prec = datetime.combine(ultimo_turno_prec[0].data_turno, time(hour=self.ORARIO_TURNI[ultimo_turno_prec[0].tipo.value][1]))
-        if self.ORARIO_TURNI[ultimo_turno_prec[0].tipo.value][1] < self.ORARIO_TURNI[ultimo_turno_prec[0].tipo.value][0]:
-            fine_ultimo_turno_prec += timedelta(days=1)
+        # Trova l'orario di fine dell'ultimo turno della settimana precedente, gestendo correttamente le notti.
+        fine_ultimo_turno_prec = None
+        for item in turni_prec:
+            fascia_prec: FasciaOraria = item[0]
+            if fascia_prec.tipo == TipoFascia.RIPOSO:
+                continue
+            orari = self.ORARIO_TURNI[fascia_prec.tipo.value]
+            end_time_prec = datetime.combine(fascia_prec.data_turno, time(hour=orari[1]))
+            if orari[1] < orari[0]: # Gestisce la notte
+                end_time_prec += timedelta(days=1)
+            
+            if fine_ultimo_turno_prec is None or end_time_prec > fine_ultimo_turno_prec:
+                fine_ultimo_turno_prec = end_time_prec
 
-        if (segmenti_lavoro[0][0] - fine_ultimo_turno_prec).total_seconds() / 3600 >= self.RIPOSO_SETTIMANALE_MIN:
+        # Se non c'è un ultimo turno (solo riposi) o se il gap è sufficiente
+        if not fine_ultimo_turno_prec or (segmenti_lavoro[0][0] - fine_ultimo_turno_prec).total_seconds() / 3600 >= self.RIPOSO_SETTIMANALE_MIN:
             return True
 
         # Controlla il confine FINALE (tra settimana corrente e successiva)
@@ -317,65 +356,126 @@ class Turnazione:
         if not turni_succ:
             return True # Se la settimana dopo non lavora, inizierà un periodo di riposo.
 
+        # Altrimenti, calcoliamo il gap tra la fine dell'ultimo turno corrente e l'inizio del primo successivo
+        inizio_primo_turno_succ = None
+        for item in turni_succ:
+            fascia_succ: FasciaOraria = item[0]
+            if fascia_succ.tipo == TipoFascia.RIPOSO:
+                continue
+            orari = self.ORARIO_TURNI[fascia_succ.tipo.value]
+            start_time_succ = datetime.combine(fascia_succ.data_turno, time(hour=orari[0]))
+            if inizio_primo_turno_succ is None or start_time_succ < inizio_primo_turno_succ:
+                inizio_primo_turno_succ = start_time_succ
+        
+        fine_ultimo_turno_corrente = segmenti_lavoro[-1][1]
+        if inizio_primo_turno_succ and (inizio_primo_turno_succ - fine_ultimo_turno_corrente).total_seconds() / 3600 >= self.RIPOSO_SETTIMANALE_MIN:
+            return True
+
         # Se nessun controllo ha dato esito positivo, non c'è un riposo di 24h garantito.
         return False
 
     def _check_riposo_tra_turni(self, settimana_key: tuple[int, int], data_turno: date, tipo_fascia: TipoFascia, dipendente_obj: Dipendente, turno_breve: bool, piano: int, jolly: bool) -> bool:
         """
-        Simula l'assegnazione e verifica che venga rispettato il vincolo delle 11 ore di riposo tra i turni.
-        Restituisce True se il vincolo è rispettato, False altrimenti.
+        Simula l'assegnazione e verifica che venga rispettato il vincolo delle 11 ore di riposo tra i turni,
+        controllando anche i turni a cavallo con le settimane adiacenti.
         """
         # 1. Creiamo un'istanza TEMPORANEA di Turnazione
         turnazione_simulata = Turnazione()
+        # Ottimizzazione: Copiamo la configurazione dall'istanza attuale
+        turnazione_simulata.max_jolly_per_turno = self.max_jolly_per_turno
+        turnazione_simulata.max_dipendenti_per_piano = self.max_dipendenti_per_piano
+        turnazione_simulata.limiti_fascia = self.limiti_fascia.copy()
         
         # 2. Iniettiamo in questa istanza una COPIA della settimana corrente
         turnazione_simulata.turnazioneSettimanale[settimana_key] = deepcopy(self.turnazioneSettimanale.get(settimana_key, {}))
         
         # 3. Aggiungiamo la NUOVA assegnazione alla turnazione simulata
-        #    Recuperiamo la fascia dalla simulazione
         fascia_simulata = turnazione_simulata.turnazioneSettimanale[settimana_key].get(data_turno, {}).get(tipo_fascia)
-        
         if fascia_simulata:
-            # Aggiungiamo l'assegnazione usando l'oggetto dipendente reale (ma nella struttura copiata)
             fascia_simulata.ripristina_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly))
         
-        # 4. Recuperiamo TUTTI i turni dalla simulazione
+        # 4. Recuperiamo TUTTI i turni dalla simulazione per la settimana corrente
         assegnazioni_dip = turnazione_simulata.get_assegnazioni_dipendente(settimana_key, dipendente_obj.id_dipendente)
         lista_intervalli = []
 
         for item in assegnazioni_dip:
             fascia_obj: FasciaOraria = item[0]
-            # Ignoriamo i turni di RIPOSO per il calcolo delle ore di stacco lavorativo
             if fascia_obj.tipo == TipoFascia.RIPOSO:
                 continue
 
-            orari = self.ORARIO_TURNI[fascia_obj.tipo.value] # es. [7, 14]
+            orari = self.ORARIO_TURNI[fascia_obj.tipo.value]
             start_h, end_h = orari[0], orari[1]
-
-            # Creiamo i datetime completi
             dt_start = datetime.combine(fascia_obj.data_turno, time(hour=start_h))
             dt_end = datetime.combine(fascia_obj.data_turno, time(hour=end_h))
-
-            # Se l'ora di fine è minore dell'inizio (es. NOTTE 21-07), aggiungiamo un giorno alla fine
             if end_h < start_h:
                 dt_end += timedelta(days=1)
             
             lista_intervalli.append((dt_start, dt_end, fascia_obj.tipo.value))
 
-        # Ordiniamo i turni in base all'orario di inizio
+        # --- Aggiungiamo i turni di confine per un controllo completo ---
+        anno, settimana = settimana_key
+        primo_giorno_settimana = date.fromisocalendar(anno, settimana, 1)
+
+        # A. Turno finale della settimana precedente
+        data_settimana_prec = primo_giorno_settimana - timedelta(days=1)
+        settimana_key_prec = (data_settimana_prec.year, data_settimana_prec.isocalendar()[1])
+        turni_prec = self.get_assegnazioni_dipendente(settimana_key_prec, dipendente_obj.id_dipendente)
+        if turni_prec:
+            fine_ultimo_turno_prec = None
+            ultimo_turno_prec_obj = None
+            for item in turni_prec:
+                fascia_prec: FasciaOraria = item[0]
+                if fascia_prec.tipo == TipoFascia.RIPOSO: continue
+                
+                orari = self.ORARIO_TURNI[fascia_prec.tipo.value]
+                end_time_prec = datetime.combine(fascia_prec.data_turno, time(hour=orari[1]))
+                if orari[1] < orari[0]: end_time_prec += timedelta(days=1)
+                
+                if fine_ultimo_turno_prec is None or end_time_prec > fine_ultimo_turno_prec:
+                    fine_ultimo_turno_prec = end_time_prec
+                    start_time_prec = datetime.combine(fascia_prec.data_turno, time(hour=orari[0]))
+                    ultimo_turno_prec_obj = (start_time_prec, end_time_prec, fascia_prec.tipo.value)
+
+            if ultimo_turno_prec_obj:
+                lista_intervalli.append(ultimo_turno_prec_obj)
+
+        # B. Turno iniziale della settimana successiva
+        data_settimana_succ = primo_giorno_settimana + timedelta(days=7)
+        settimana_key_succ = (data_settimana_succ.year, data_settimana_succ.isocalendar()[1])
+        turni_succ = self.get_assegnazioni_dipendente(settimana_key_succ, dipendente_obj.id_dipendente)
+        if turni_succ:
+            inizio_primo_turno_succ = None
+            primo_turno_succ_obj = None
+            for item in turni_succ:
+                fascia_succ: FasciaOraria = item[0]
+                if fascia_succ.tipo == TipoFascia.RIPOSO: continue
+
+                orari = self.ORARIO_TURNI[fascia_succ.tipo.value]
+                start_time_succ = datetime.combine(fascia_succ.data_turno, time(hour=orari[0]))
+
+                if inizio_primo_turno_succ is None or start_time_succ < inizio_primo_turno_succ:
+                    inizio_primo_turno_succ = start_time_succ
+                    end_time_succ = datetime.combine(fascia_succ.data_turno, time(hour=orari[1]))
+                    if orari[1] < orari[0]: end_time_succ += timedelta(days=1)
+                    primo_turno_succ_obj = (start_time_succ, end_time_succ, fascia_succ.tipo.value)
+            
+            if primo_turno_succ_obj:
+                lista_intervalli.append(primo_turno_succ_obj)
+
+        # Ordiniamo i turni in base all'orario di inizio (ora include i confini)
         lista_intervalli.sort(key=lambda x: x[0])
 
         # 5. Controllo sequenziale delle 11 ore
         for i in range(len(lista_intervalli) - 1):
             turno_corrente = lista_intervalli[i]
             turno_successivo = lista_intervalli[i+1]
-            
+
             # Calcoliamo la differenza tra Fine del Corrente e Inizio del Successivo
             delta = turno_successivo[0] - turno_corrente[1]
-            
+
             if delta < timedelta(hours=self.PAUSA_TRA_TURNI):
                 raise ValueError(f"Violazione riposo min {self.PAUSA_TRA_TURNI}h: Tra {turno_corrente[2]} e {turno_successivo[2]} passano solo {delta}.")
-        
+
         return True
 
     def get_candidati_disponibili(self, sistema_dipendenti: SistemaDipendenti, data_turno: date, tipo_fascia: TipoFascia) -> List[Dipendente]:
@@ -432,17 +532,22 @@ class Turnazione:
         dipendente_obj = sistema_dipendenti.get_dipendente(id_dipendente)
         if dipendente_obj is None:
             raise ValueError("Dipendente non trovato a sistema.")
+
+        # Early return per i turni di RIPOSO per evitare check inutili
+        if tipo_fascia == TipoFascia.RIPOSO:
+            esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=False, piano=None, jolly=False))
+            return esito
             
         # Controlli Configurazione Limiti Operatori
         if jolly:
             jolly_count = sum(1 for a in fascia.assegnazioni if getattr(a, 'jolly', False))
-            if jolly_count >= self.MAX_JOLLY_PER_TURNO:
-                raise ValueError(f"Limite massimo di {self.MAX_JOLLY_PER_TURNO} Jolly raggiunto per questo turno.")
+            if jolly_count >= self.max_jolly_per_turno:
+                raise ValueError(f"Limite massimo di {self.max_jolly_per_turno} Jolly raggiunto per questo turno.")
 
         if piano is not None:
             piano_count = sum(1 for a in fascia.assegnazioni if getattr(a, 'piano', None) == piano)
-            if piano_count >= self.MAX_DIPENDENTI_PER_PIANO:
-                raise ValueError(f"Limite di {self.MAX_DIPENDENTI_PER_PIANO} dipendenti per il piano {piano} raggiunto.")
+            if piano_count >= self.max_dipendenti_per_piano:
+                raise ValueError(f"Limite di {self.max_dipendenti_per_piano} dipendenti per il piano {piano} raggiunto.")
 
         # Controllo vincolo ore massime settimanali
         esito_ore, causa_nuovo = self._check_max_ore_settimanali(id_dipendente, settimana_key, tipo_fascia, turno_breve)
@@ -472,9 +577,10 @@ class Turnazione:
         # AUTOMATISMO: Se è un turno di NOTTE, assegna automaticamente RIPOSO il giorno dopo
         if esito and tipo_fascia == TipoFascia.NOTTE:
             data_domani = data_turno + timedelta(days=1)
-            self.add_turno(data_domani, TipoFascia.RIPOSO, StatoFascia.CREATO)
-            print(f"Assegnazione automatica RIPOSO per {dipendente_obj.nome} {dipendente_obj.cognome} il {data_domani}")
-            self.assegna_turno(sistema_dipendenti, id_dipendente, data_domani, TipoFascia.RIPOSO, piano=None)
+            # La chiamata ricorsiva ora sarà molto più leggera grazie all'early return
+            if self.add_turno(data_domani, TipoFascia.RIPOSO, StatoFascia.CREATO):
+                print(f"Assegnazione automatica RIPOSO per {dipendente_obj.nome} {dipendente_obj.cognome} il {data_domani}")
+                self.assegna_turno(sistema_dipendenti, id_dipendente, data_domani, TipoFascia.RIPOSO, piano=None)
 
         return esito
 
@@ -494,6 +600,46 @@ class Turnazione:
 
         return fascia.remove_assegnazione(id_dipendente)
 
+    def svuota_settimana(self, anno: int, settimana: int) -> bool:
+        """
+        Rimuove tutte le assegnazioni della settimana specificata,
+        riportando i turni allo stato 'GENERATA' e svuotando la memoria.
+        """
+        settimana_key = (anno, settimana)
+        settimana_dict = self.turnazioneSettimanale.get(settimana_key, {})
+        
+        if not settimana_dict:
+            print("Nessun turno trovato per questa settimana.")
+            return False
+
+        # Verifica blocco approvazione: se approvata, non si tocca.
+        for fasce in settimana_dict.values():
+            for fascia in fasce.values():
+                if fascia.stato == StatoFascia.APPROVATA:
+                    print("Impossibile svuotare: La settimana è APPROVATA. Esegui 'Riapri Settimana' prima.")
+                    return False
+        
+        primo_giorno = date.fromisocalendar(anno, settimana, 1)
+        ultimo_giorno = primo_giorno + timedelta(days=6)
+        
+        if sistemaSalvataggio.reset_settimana(primo_giorno.strftime("%Y-%m-%d"), ultimo_giorno.strftime("%Y-%m-%d")):
+            print(f"Settimana {settimana_key} svuotata con successo.")
+            
+            # Aggiornamento Memoria: Logica di pulizia profonda
+            for giorno_dict in settimana_dict.values():
+                # Rimuovi completamente le fasce RIPOSO dalla memoria (verranno ricreate se necessario)
+                fasce_da_rimuovere = [tf for tf, f in giorno_dict.items() if f.tipo == TipoFascia.RIPOSO]
+                for tf in fasce_da_rimuovere:
+                    del giorno_dict[tf]
+                
+                # Per le altre fasce (MATTINA, POMERIGGIO, NOTTE), svuota solo le assegnazioni e resetta lo stato
+                for fascia in giorno_dict.values():
+                    fascia.assegnazioni.clear()
+                    fascia.stato = StatoFascia.GENERATA
+            return True
+        else:
+            print("Errore durante lo svuotamento della settimana.")
+            return False
 
     def approva_settimana(self, sistema_dipendenti: SistemaDipendenti, settimana_key: tuple[int, int]) -> bool:
         """
@@ -565,7 +711,7 @@ class Turnazione:
 
         # 1. Storno Banca Ore (Sottraiamo il saldo)
         for id_dip in dipendenti_coinvolti:
-            saldo = self.calcola_saldo_ore_settimana(id_dip, settimana_key)
+            saldo = self.calcola_saldo_ore_settimanale(id_dip, settimana_key)
             # NOTA: Passiamo -saldo per annullare l'operazione precedente
             sistema_dipendenti.aggiorna_banca_ore(id_dip, -saldo) 
             print(f"  -> Dipendente {id_dip}: Storno di {-saldo:+.2f} ore applicato.")
@@ -592,3 +738,16 @@ class Turnazione:
                     if assegnazione.dipendente.id_dipendente == id_dipendente:
                         assegnazioni.append([fascia, assegnazione])
         return assegnazioni
+
+    # Metodi di Configurazione
+    def set_config_max_jolly(self, valore: int):
+        self.max_jolly_per_turno = valore
+        sistemaSalvataggio.save_config('max_jolly', str(valore))
+
+    def set_config_max_piano(self, valore: int):
+        self.max_dipendenti_per_piano = valore
+        sistemaSalvataggio.save_config('max_piano', str(valore))
+
+    def set_config_limite_fascia(self, tipo_fascia: TipoFascia, valore: int):
+        self.limiti_fascia[tipo_fascia] = valore
+        sistemaSalvataggio.save_config(f'limit_{tipo_fascia.value}', str(valore))

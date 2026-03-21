@@ -180,6 +180,22 @@ def remove_assegnazione_turno(id_turno: int, id_dipendente: int) -> bool:
         connection.close()
     return success
 
+def set_turno_breve(id_turno: int, id_dipendente: int, turno_breve: bool) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    val = 1 if turno_breve else 0
+    query = "UPDATE lavora SET turnoBreve = ? WHERE idTurno = ? AND idDipendente = ?"
+    success = False
+    try:
+        cursor.execute(query, (val, id_turno, id_dipendente))
+        connection.commit()
+        success = True
+    except sqlite3.Error as e:
+        print(f"Errore SQL set_turno_breve: {e}")
+    finally:
+        connection.close()
+    return success
+
 def save_last_update(data: str):
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
@@ -207,6 +223,62 @@ def get_data_ultimo_turno(id_dipendente: int, tipo_fascia: str) -> str | None:
         return result[0] if result else None
     except sqlite3.Error as e:
         print(f"Errore SQL get_data_ultimo_turno: {e}")
+        return None
+    finally:
+        connection.close()
+
+def reset_settimana(data_inizio: str, data_fine: str) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    
+    # Cancelliamo le assegnazioni (lavora) per i turni nel range specificato
+    query_del = """
+        DELETE FROM lavora 
+        WHERE idTurno IN (
+            SELECT idTurno FROM turno 
+            WHERE dataTurno >= ? AND dataTurno <= ?
+        )
+    """
+    
+    # Riportiamo lo stato dei turni a 'GENERATA' (pronti per essere riempiti)
+    query_upd = "UPDATE turno SET stato = 'GENERATA' WHERE dataTurno >= ? AND dataTurno <= ?"
+
+    success = False
+    try:
+        cursor.execute(query_del, (data_inizio, data_fine))
+        cursor.execute(query_upd, (data_inizio, data_fine))
+        connection.commit()
+        success = True
+    except sqlite3.Error as e:
+        print(f"Errore SQL Reset Settimana: {e}")
+    finally:
+        connection.close()
+    return success
+
+def save_config(chiave: str, valore: str) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    query = "INSERT OR REPLACE INTO configurazione (chiave, valore) VALUES (?, ?)"
+    try:
+        cursor.execute(query, (chiave, str(valore)))
+        connection.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore SQL Save Config: {e}")
+        return False
+    finally:
+        connection.close()
+
+def get_config(chiave: str) -> str | None:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+    query = "SELECT valore FROM configurazione WHERE chiave=?"
+    try:
+        cursor.execute(query, (chiave,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except sqlite3.Error as e:
+        print(f"Errore SQL Get Config: {e}")
         return None
     finally:
         connection.close()

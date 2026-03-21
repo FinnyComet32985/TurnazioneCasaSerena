@@ -23,6 +23,9 @@ def main():
         sistema_dipendenti = SistemaDipendenti()
         turnazione = Turnazione()
     
+    # Caricamento configurazione (eseguito una sola volta all'avvio)
+    turnazione.load_configuration()
+
     # Manteniamo l'istanza dell'interfaccia (o degli strati logici) pronta per quando 
     # la passeremo alla MainWindow per farla comunicare coi dati.
     interfaccia = InterfacciaDirigente(sistema_dipendenti, turnazione)

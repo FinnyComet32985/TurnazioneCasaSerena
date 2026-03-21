@@ -160,6 +160,22 @@ class InterfacciaDirigente:
         except ValueError:
             print("Formato non valido.")
 
+    def svuota_turnazione(self):
+        """
+        Comando per svuotare completamente una settimana (rimuovere assegnazioni).
+        """
+        input_str = input("Inserisci la settimana da SVUOTARE (anno settimana, es: 2025 2): ")
+        try:
+            parti = input_str.split()
+            if len(parti) != 2: raise ValueError
+            anno, settimana = int(parti[0]), int(parti[1])
+            
+            confirm = input(f"ATTENZIONE: Stai per cancellare TUTTE le assegnazioni della settimana {anno}-{settimana}. I dati andranno persi. Continuare? (s/n): ")
+            if confirm.lower() == 's':
+                self.turnazione.svuota_settimana(anno, settimana)
+        except ValueError:
+            print("Formato non valido.")
+
     def print_turni(self):
         input_str = input("inserisci la settimana di cui vuoi vedere i turni (anno settimana, es: 2025 2): ")
         
@@ -278,3 +294,43 @@ class InterfacciaDirigente:
 
         for t in turn:
             print(t[0].data_turno, t[0].tipo, t[1].dipendente.nome, t[1].dipendente.cognome, t[1].piano, t[1].jolly, t[1].turnoBreve)
+
+    def configura_parametri(self):
+        print("\n--- CONFIGURAZIONE PARAMETRI ---")
+        print(f"1. Max Jolly per turno (Attuale: {self.turnazione.max_jolly_per_turno})")
+        print(f"2. Max Dipendenti per piano (Attuale: {self.turnazione.max_dipendenti_per_piano})")
+        print(f"3. Limite MATTINA (Attuale: {self.turnazione.limiti_fascia[TipoFascia.MATTINA]})")
+        print(f"4. Limite POMERIGGIO (Attuale: {self.turnazione.limiti_fascia[TipoFascia.POMERIGGIO]})")
+        print(f"5. Limite NOTTE (Attuale: {self.turnazione.limiti_fascia[TipoFascia.NOTTE]})")
+        
+        scelta = input("\nCosa vuoi modificare? (q per uscire): ")
+        
+        if scelta == '1':
+            val = input("Nuovo valore Max Jolly: ")
+            if val.isdigit():
+                self.turnazione.set_config_max_jolly(int(val))
+                print("Salvato.")
+        elif scelta == '2':
+            val = input("Nuovo valore Max Piano: ")
+            if val.isdigit():
+                self.turnazione.set_config_max_piano(int(val))
+                print("Salvato.")
+        elif scelta == '3':
+            val = input("Nuovo limite MATTINA: ")
+            if val.isdigit():
+                self.turnazione.set_config_limite_fascia(TipoFascia.MATTINA, int(val))
+                print("Salvato.")
+        elif scelta == '4':
+            val = input("Nuovo limite POMERIGGIO: ")
+            if val.isdigit():
+                self.turnazione.set_config_limite_fascia(TipoFascia.POMERIGGIO, int(val))
+                print("Salvato.")
+        elif scelta == '5':
+            val = input("Nuovo limite NOTTE: ")
+            if val.isdigit():
+                self.turnazione.set_config_limite_fascia(TipoFascia.NOTTE, int(val))
+                print("Salvato.")
+        elif scelta.lower() == 'q':
+            return
+        else:
+            print("Scelta non valida.")
