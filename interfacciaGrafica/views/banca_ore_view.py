@@ -1,0 +1,340 @@
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QMessageBox,
+    QGridLayout
+)
+from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor
+from PyQt6.QtCore import Qt, QSize
+import random # Per simulare i dati storici
+
+class BancaOreView(QWidget):
+    def __init__(self, interfaccia):
+        super().__init__()
+        self.interfaccia = interfaccia
+        self.current_dip_id = None
+        self.is_large_layout = None # Stato attuale del layout
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 20, 0, 0)
+        main_layout.setSpacing(20)
+
+        # --- Header ---
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        title = QLabel("Gestione Banca Ore")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #0f172a;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+
+        # --- Body ---
+        body_layout = QHBoxLayout()
+        body_layout.setSpacing(30)
+
+        # Colonna Sinistra
+        left_column = QWidget()
+        self.left_layout = QVBoxLayout(left_column) # Salviamo il riferimento
+        self.left_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_layout.setSpacing(20)
+
+        self.saldo_card = self.create_saldo_card()
+        self.left_layout.addWidget(self.saldo_card)
+
+        self.left_layout.addStretch() # Spinge il saldo in alto
+        body_layout.addWidget(left_column, alignment=Qt.AlignmentFlag.AlignTop)
+
+        # Colonna Destra: Storico (Lista)
+        right_column = QWidget()
+        right_layout = QVBoxLayout(right_column)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(10)
+
+        lbl_storico = QLabel("Storico Movimenti")
+        lbl_storico.setStyleSheet("color: #64748b; font-weight: bold; font-size: 14px;")
+        right_layout.addWidget(lbl_storico)
+
+        # Container Overlay (Lista + Card Info in basso)
+        overlay_container = QWidget()
+        self.overlay_layout = QGridLayout(overlay_container) # Salviamo il riferimento
+        self.overlay_layout.setContentsMargins(0, 0, 0, 0)
+        self.overlay_layout.setSpacing(0)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+        
+        scroll_content = QWidget()
+        scroll_content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        scroll_content.setStyleSheet("background-color: transparent;")
+        
+        self.lista_movimenti_layout = QVBoxLayout(scroll_content)
+        self.lista_movimenti_layout.setSpacing(15)
+        self.lista_movimenti_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        # Margine inferiore extra per permettere di scrollare tutto il contenuto sopra la card fissa
+        self.lista_movimenti_layout.setContentsMargins(0, 0, 0, 100) 
+        
+        scroll_area.setWidget(scroll_content)
+        
+        self.info_card = self.create_info_card()
+        self.overlay_layout.addWidget(scroll_area, 0, 0)
+        # La info_card viene posizionata dinamicamente nel resizeEvent
+
+        right_layout.addWidget(overlay_container)
+
+        body_layout.addWidget(right_column, stretch=1)
+
+        main_layout.addLayout(header_layout)
+        main_layout.addLayout(body_layout)
+    
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Se l'altezza è sufficiente (> 550px), sposta a sinistra. Altrimenti overlay.
+        is_large = self.height() > 550
+        
+        if is_large != self.is_large_layout:
+            self.is_large_layout = is_large
+            self.update_info_card_position()
+            
+    def update_info_card_position(self):
+        # Rimuove dal layout precedente (senza eliminare l'oggetto)
+        self.info_card.setParent(None)
+        
+        if self.is_large_layout:
+            # --- POSIZIONE: Colonna Sinistra (Statico) ---
+            # Inserisce in posizione 1 (dopo la saldo_card, prima dello stretch)
+            self.left_layout.insertWidget(1, self.info_card)
+            
+            # Stile "Badge" (Solido, Bordo completo)
+            self.info_card.setStyleSheet("""
+                #info_card {
+                    background-color: #eff6ff;
+                    border: 1px solid #dbeafe;
+                    border-radius: 8px;
+                }
+            """)
+            self.info_card.layout().setContentsMargins(15, 15, 15, 15)
+            
+        else:
+            # --- POSIZIONE: Overlay Destra (Sticky Bottom) ---
+            self.overlay_layout.addWidget(self.info_card, 0, 0, Qt.AlignmentFlag.AlignBottom)
+            
+            # Stile "Overlay" (Sfumato in alto, Bordo parziale)
+            self.info_card.setStyleSheet("""
+                #info_card {
+                    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 rgba(239, 246, 255, 0), stop:0.3 #eff6ff, stop:1 #eff6ff);
+                    border: 1px solid #dbeafe;
+                    border-top: none; 
+                    border-bottom-left-radius: 8px;
+                    border-bottom-right-radius: 8px;
+                    border-top-left-radius: 0px;
+                    border-top-right-radius: 0px;
+                }
+            """)
+            # Padding superiore maggiore per la sfumatura
+            self.info_card.layout().setContentsMargins(20, 40, 20, 20)
+
+    def create_saldo_card(self):
+        card = QWidget()
+        card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        card.setObjectName("saldo_card")
+        card.setFixedWidth(350)
+        card.setMinimumHeight(240)
+        # Sfondo scuro (Oro/Ambra scuro)
+        card.setStyleSheet("""
+            #saldo_card {
+                background-color: #ea580c; 
+                border-radius: 12px;
+            }
+        """)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(25, 25, 25, 25)
+        layout.setSpacing(5)
+
+        # Header: Titolo + Icona
+        header = QHBoxLayout()
+        lbl_title = QLabel("SALDO ATTUALE")
+        lbl_title.setStyleSheet("color: rgba(255,255,255,0.8); font-size: 12px; font-weight: bold; letter-spacing: 1px;")
+        
+        icon_label = QLabel()
+        pix = QPixmap("./interfacciaGrafica/assets/hourglass.svg")
+        if not pix.isNull():
+            # Ricoloro l'icona in Oro chiaro
+            painter = QPainter(pix)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(pix.rect(), QColor("#fcd34d")) 
+            painter.end()
+            icon_label.setPixmap(pix.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        
+        header.addWidget(lbl_title)
+        header.addStretch()
+        header.addWidget(icon_label)
+        layout.addLayout(header)
+
+        layout.addSpacing(10)
+
+        # Valore
+        val_layout = QHBoxLayout()
+        val_layout.setSpacing(10)
+        val_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+
+        self.lbl_saldo = QLabel("0.00")
+        self.lbl_saldo.setStyleSheet("color: #ffffff; font-size: 48px; font-weight: 800;")
+        
+        lbl_ore = QLabel("ore")
+        lbl_ore.setStyleSheet("color: rgba(255,255,255,0.8); font-size: 18px; font-weight: bold; margin-bottom: 8px;")
+
+        val_layout.addWidget(self.lbl_saldo)
+        val_layout.addWidget(lbl_ore)
+        layout.addLayout(val_layout)
+
+        layout.addSpacing(20)
+
+        # Bottone Regola
+        btn_regola = QPushButton("  Regola saldo ore")
+        btn_regola.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_regola.setIcon(QIcon("./interfacciaGrafica/assets/options.svg"))
+        btn_regola.setIconSize(QSize(20, 20))
+        btn_regola.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255,255,255,0.2);
+                color: white;
+                border: 1px solid rgba(255,255,255,0.3);
+                border-radius: 6px;
+                padding: 8px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255,255,255,0.3);
+            }
+        """)
+        btn_regola.clicked.connect(self.cmd_regola_saldo)
+        layout.addWidget(btn_regola)
+
+        return card
+
+    def create_info_card(self):
+        info_card = QWidget()
+        info_card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        info_card.setObjectName("info_card")
+        # Lo stile viene applicato dinamicamente in update_info_card_position
+        info_layout = QHBoxLayout(info_card)
+        info_layout.setSpacing(5) 
+
+        info_icon = QLabel()
+        pixmap = QPixmap("./interfacciaGrafica/assets/information-circle.svg")
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor("#1e3a8a"))
+        painter.end()
+        info_icon.setPixmap(pixmap.scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        
+        info_text = QLabel("Parte delle ore accumulate dovranno essere recuperate o pagate entro il 31/12.")
+        info_text.setWordWrap(True)
+        info_text.setStyleSheet("color: #1e3a8a; font-size: 13px; border: none; background: transparent;")
+
+        info_layout.addWidget(info_icon, alignment=Qt.AlignmentFlag.AlignTop)
+        info_layout.addWidget(info_text)
+
+        return info_card
+
+    def create_transaction_card(self, data, descrizione, ore, positivo):
+        card = QWidget()
+        card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        card.setObjectName("trans_card")
+        card.setStyleSheet("""
+            #trans_card {
+                background-color: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+            }
+        """)
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(15)
+
+        # Configurazione Stile in base al segno
+        if positivo:
+            bg_icon = "#f0fdf4" # Verde chiaro
+            color_icon = "#16a34a" # Verde scuro
+            icon_name = "trending-up.svg"
+            segno = "+"
+            color_text = "#15803d"
+        else:
+            bg_icon = "#fef2f2" # Rosso chiaro
+            color_icon = "#dc2626" # Rosso scuro
+            icon_name = "trending-down.svg"
+            segno = "-"
+            color_text = "#b91c1c"
+
+        # Icona
+        icon_lbl = QLabel()
+        icon_lbl.setFixedSize(40, 40)
+        icon_lbl.setStyleSheet(f"background-color: {bg_icon}; border-radius: 20px;")
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        pix = QPixmap(f"./interfacciaGrafica/assets/{icon_name}")
+        if not pix.isNull():
+            painter = QPainter(pix)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(pix.rect(), QColor(color_icon))
+            painter.end()
+            icon_lbl.setPixmap(pix.scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+
+        # Dettagli
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(2)
+        
+        lbl_desc = QLabel(descrizione)
+        lbl_desc.setStyleSheet("color: #0f172a; font-weight: bold; font-size: 14px;")
+        
+        lbl_data = QLabel(data)
+        lbl_data.setStyleSheet("color: #64748b; font-size: 12px;")
+        
+        info_layout.addWidget(lbl_desc)
+        info_layout.addWidget(lbl_data)
+
+        # Valore Ore
+        lbl_valore = QLabel(f"{segno} {abs(ore)}h")
+        lbl_valore.setStyleSheet(f"color: {color_text}; font-weight: bold; font-size: 16px;")
+
+        layout.addWidget(icon_lbl)
+        layout.addLayout(info_layout)
+        layout.addStretch()
+        layout.addWidget(lbl_valore)
+
+        return card
+
+    def load_data(self, id_dipendente):
+        self.current_dip_id = id_dipendente
+        dip = self.interfaccia.sistema_dipendenti.get_dipendente(id_dipendente)
+        if not dip: return
+
+        # Aggiorna Saldo
+        self.lbl_saldo.setText(f"{dip.banca_ore:+.2f}")
+
+        # --- Mock Storico (Simulazione) ---
+        # Poiché il backend non ha una tabella storico, generiamo dati fittizi
+        # coerenti con il saldo attuale per mostrare la grafica.
+        while self.lista_movimenti_layout.count():
+            child = self.lista_movimenti_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        # Genera 3-5 movimenti finti
+        if dip.banca_ore == 0:
+             self.lista_movimenti_layout.addWidget(QLabel("Nessun movimento recente."))
+        else:
+            # Esempio dati
+            movimenti = [
+                ("12/01/2025", "Straordinario Turno Notte", 4.0, True),
+                ("15/01/2025", "Recupero Permesso", -2.0, False),
+                ("20/01/2025", "Approvazione Settimana 3", 1.5, True)
+            ]
+            
+            for data, desc, ore, positivo in movimenti:
+                card = self.create_transaction_card(data, desc, ore, positivo)
+                self.lista_movimenti_layout.addWidget(card)
+
+    def cmd_regola_saldo(self):
+        QMessageBox.information(self, "Regola Saldo", "Funzionalità di rettifica manuale in sviluppo.")

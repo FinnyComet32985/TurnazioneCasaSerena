@@ -76,43 +76,6 @@ class ModificaDatiDialog(QDialog):
     def get_data(self):
         return self.ferie_spin.value(), self.rol_spin.value(), self.banca_ore_spin.value()
 
-class AddAssenzaDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Aggiungi Assenza")
-        
-        layout = QFormLayout(self)
-        
-        self.tipo_combo = QComboBox()
-        for tipo in TipoAssenza:
-            self.tipo_combo.addItem(tipo.value, userData=tipo)
-            
-        self.inizio_input = QLineEdit(datetime.now().strftime("%d/%m/%Y %H:%M"))
-        self.fine_input = QLineEdit(datetime.now().strftime("%d/%m/%Y %H:%M"))
-        
-        layout.addRow("Tipo:", self.tipo_combo)
-        layout.addRow("Data Inizio (GG/MM/AAAA HH:MM):", self.inizio_input)
-        layout.addRow("Data Fine (GG/MM/AAAA HH:MM):", self.fine_input)
-        
-        btn_layout = QHBoxLayout()
-        btn_salva = QPushButton("Aggiungi")
-        btn_annulla = QPushButton("Annulla")
-        btn_salva.clicked.connect(self.accept)
-        btn_annulla.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_salva)
-        btn_layout.addWidget(btn_annulla)
-        
-        layout.addRow(btn_layout)
-        
-    def get_data(self):
-        try:
-            tipo = self.tipo_combo.currentData()
-            dt_inizio = datetime.strptime(self.inizio_input.text(), "%d/%m/%Y %H:%M")
-            dt_fine = datetime.strptime(self.fine_input.text(), "%d/%m/%Y %H:%M")
-            return tipo, dt_inizio, dt_fine
-        except ValueError:
-            return None, None, None
-
 class PersonaleView(QWidget):
     def __init__(self, interfaccia):
         super().__init__()

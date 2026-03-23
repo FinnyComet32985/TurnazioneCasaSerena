@@ -5,10 +5,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QSize
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor, QPen, QPainterPath
 
+# Import della nuova vista per le assenze
+from .assenze_view import AssenzeView
+from .banca_ore_view import BancaOreView
+
 class BadgeWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(580) # Larghezza fissa per mantenere l'aspetto badge
+        self.setMinimumWidth(580) # Larghezza minima (espandibile) per nomi lunghi
         # L'altezza si adatterà automaticamente al contenuto grazie al layout
 
     def paintEvent(self, event):
@@ -262,16 +266,11 @@ class DettaglioDipendenteView(QWidget):
         # --- Tab Content (Stacked Widget) ---
         self.tab_content = QStackedWidget()
         
-        page_assenze = QWidget()
-        page_assenze.setLayout(QVBoxLayout())
-        page_assenze.layout().addWidget(QLabel("Contenuto Assenze (da implementare)"))
+        self.page_assenze = AssenzeView(self.interfaccia)
+        self.page_banca_ore = BancaOreView(self.interfaccia)
         
-        page_banca_ore = QWidget()
-        page_banca_ore.setLayout(QVBoxLayout())
-        page_banca_ore.layout().addWidget(QLabel("Contenuto Banca Ore (da implementare)"))
-        
-        self.tab_content.addWidget(page_assenze)
-        self.tab_content.addWidget(page_banca_ore)
+        self.tab_content.addWidget(self.page_assenze)
+        self.tab_content.addWidget(self.page_banca_ore)
 
         # Add all widgets to main layout
         main_layout.addLayout(header_layout)
@@ -311,6 +310,10 @@ class DettaglioDipendenteView(QWidget):
             self.lbl_stato_value.setStyleSheet("color: #16a34a; font-size: 18px; font-weight: bold; border: none; background: transparent;")
         else: # LICENZIATO
             self.lbl_stato_value.setStyleSheet("color: #64748b; font-size: 18px; font-weight: bold; border: none; background: transparent;")
+        
+        # Carica i dati nella tab delle assenze
+        self.page_assenze.load_data(self.current_dip_id)
+        self.page_banca_ore.load_data(self.current_dip_id)
         
         self.switch_tab(0)
         
