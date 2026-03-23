@@ -1,10 +1,10 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QListWidget, QListWidgetItem, QPushButton, 
+    QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QMessageBox, QDialog, QLineEdit, QFormLayout,
     QComboBox, QDoubleSpinBox
 )
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import Qt
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 from datetime import datetime
@@ -131,109 +131,146 @@ class PersonaleView(QWidget):
         stats_layout.setContentsMargins(0, 0, 0, 0)
         stats_layout.setSpacing(20)
 
-        # Recupero dati dal backend
-        tot_dip, tot_ferie, tot_cert = self.interfaccia.sistema_dipendenti.get_statistiche_oggi()
-
-        # Creazione Card
-        card_totale = self.create_stat_card("Totale Dipendenti", str(tot_dip), "#3b82f6", "./interfacciaGrafica/assets/id-card.svg")
-        card_ferie = self.create_stat_card("Ferie in corso", str(tot_ferie), "#f59e0b", "./interfacciaGrafica/assets/earth.svg")
-        card_cert = self.create_stat_card("Personale in Certificato", str(tot_cert), "#ef4444", "./interfacciaGrafica/assets/fitness.svg")
+        # Creazione Card (Salviamo le label dei valori in self per aggiornarle dopo)
+        card_totale, self.lbl_tot_dip = self.create_stat_card("TOTALE DIPENDENTI", "-", "#3b82f6", "./interfacciaGrafica/assets/id-card.svg")
+        card_ferie, self.lbl_tot_ferie = self.create_stat_card("FERIE IN CORSO", "-", "#f59e0b", "./interfacciaGrafica/assets/earth.svg")
+        card_cert, self.lbl_tot_cert = self.create_stat_card("PERSONALE IN CERTIFICATO", "-", "#ef4444", "./interfacciaGrafica/assets/fitness.svg")
 
         stats_layout.addWidget(card_totale)
         stats_layout.addWidget(card_ferie)
         stats_layout.addWidget(card_cert)
 
-        # Area Principale (Lista a sinistra, Dettagli a destra)
-        main_area = QHBoxLayout()
+        # --- HEADER ACTIONS ---
+        action_bar = QWidget()
+        action_layout = QHBoxLayout(action_bar)
+        action_layout.setContentsMargins(0, 10, 0, 10)
+        
+        # --- Search Widget ---
+        search_container = QWidget()
+        search_container.setObjectName("search_container_custom") # Assegno ID univoco per evitare ereditarietà indesiderata
+        search_container.setFixedWidth(300)
+        search_container.setStyleSheet("""
+            #search_container_custom {
+                background-color: white;
+                border: 1px solid #cbd5e1; 
+                border-radius: 4px;
+            }
+        """)
+        search_layout = QHBoxLayout(search_container)
+        search_layout.setContentsMargins(8, 0, 0, 0)
+        search_layout.setSpacing(6)
 
-        # --- Lista Dipendenti ---
-        list_container = QWidget()
-        list_container.setObjectName("card_container")
-        list_container.setStyleSheet("background-color: white; border-radius: 8px; border: 1px solid #cbd5e1;")
-        list_layout = QVBoxLayout(list_container)
+        search_icon = QLabel()
+        search_icon.setPixmap(QPixmap("./interfacciaGrafica/assets/search.svg").scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Cerca dipendente...")
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                padding: 8px 0px; 
+                border: none;
+                background-color: transparent;
+                color: #0f172a;
+            }
+        """)
+        self.search_input.textChanged.connect(self.aggiorna_tabella)
         
-        self.lista_ui = QListWidget()
-        self.lista_ui.setStyleSheet("QListWidget { border: none; background-color: transparent; font-size: 16px; color: #0f172a; } QListWidget::item { padding: 12px; border-bottom: 1px solid #f1f5f9; } QListWidget::item:hover { background-color: #f8fafc; } QListWidget::item:selected { background-color: #e2e8f0; color: #000; }")
-        self.lista_ui.currentItemChanged.connect(self.update_details_panel)
+        search_layout.addWidget(search_icon)
+        search_layout.addWidget(self.search_input)
         
-        btn_assumi = QPushButton("➕ Assumi Dipendente")
-        btn_assumi.setStyleSheet("padding: 10px; font-size: 14px; background-color: #3b82f6; color: white; border-radius: 4px;")
-        btn_assumi.clicked.connect(self.cmd_assumi)
+        self.btn_assumi = QPushButton(" Assumi Dipendente")
+        self.btn_assumi.setIcon(QIcon("./interfacciaGrafica/assets/person-add.svg"))
+        self.btn_assumi.setStyleSheet("""
+            QPushButton {
+                padding: 8px 16px; 
+                font-size: 14px; 
+                border: none;
+                background-color: #3b82f6; 
+                color: white; 
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #2563eb; }
+        """)
+        self.btn_assumi.clicked.connect(self.cmd_assumi)
         
-        list_layout.addWidget(btn_assumi)
-        list_layout.addWidget(self.lista_ui)
+        action_layout.addWidget(search_container)
+        action_layout.addStretch()
+        action_layout.addWidget(self.btn_assumi)
         
-        # --- Pannello Dettagli (destra) ---
-        details_container = QWidget()
-        details_container.setObjectName("card_container")
-        details_container.setStyleSheet("QWidget { background-color: white; border-radius: 8px; border: 1px solid #cbd5e1; color: #0f172a; }")
-        details_layout = QVBoxLayout(details_container)
+        # --- TABELLA DIPENDENTI ---
+        self.table = QTableWidget()
+        headers = ["Nome", "Cognome", "Ferie (gg)", "ROL (h)", "Banca Ore", "Stato", ""]
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(5, 150)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(6, 60)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False) # Rimuove griglia (linee verticali)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.table.verticalHeader().setDefaultSectionSize(60) # Aumenta altezza righe per ospitare la pillola
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.cellClicked.connect(self.on_row_clicked)
         
-        self.details_title = QLabel("Seleziona un dipendente")
-        self.details_title.setObjectName("details_title")
-        self.details_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Contenitore che mostriamo/nascondiamo
-        self.details_content = QWidget()
-        details_content_layout = QVBoxLayout(self.details_content)
-        details_content_layout.setContentsMargins(0,0,0,0)
-        
-        # Dati numerici
-        dati_layout = QFormLayout()
-        self.lbl_ferie = QLabel()
-        self.lbl_rol = QLabel()
-        self.lbl_banca_ore = QLabel()
-        dati_layout.addRow("Ferie Rimanenti (giorni):", self.lbl_ferie)
-        dati_layout.addRow("ROL Rimanenti (ore):", self.lbl_rol)
-        dati_layout.addRow("Banca Ore (ore):", self.lbl_banca_ore)
-        
-        # Lista Assenze
-        self.assenze_list_ui = QListWidget()
-        self.assenze_list_ui.setStyleSheet("QListWidget { border: 1px solid #e2e8f0; border-radius: 4px; padding: 5px; color: #0f172a; background-color: white; }")
-        
-        # Bottoni Azioni
-        actions_layout = QHBoxLayout()
-        self.btn_modifica_dati = QPushButton("📝 Modifica Dati")
-        self.btn_modifica_dati.setStyleSheet("background-color: #3b82f6; color: white; padding: 8px; border-radius: 4px; border: none;")
-        self.btn_aggiungi_assenza = QPushButton("📅 Aggiungi Assenza")
-        self.btn_aggiungi_assenza.setStyleSheet("background-color: #3b82f6; color: white; padding: 8px; border-radius: 4px; border: none;")
-        self.btn_licenzia = QPushButton("🗑️ Licenzia")
-        self.btn_licenzia.setStyleSheet("background-color: #ef4444; color: white; padding: 8px; border-radius: 4px; border: none;")
-        
-        self.btn_modifica_dati.clicked.connect(self.cmd_modifica_dati)
-        self.btn_aggiungi_assenza.clicked.connect(self.cmd_aggiungi_assenza)
-        self.btn_licenzia.clicked.connect(self.cmd_licenzia)
-        
-        actions_layout.addWidget(self.btn_modifica_dati)
-        actions_layout.addWidget(self.btn_aggiungi_assenza)
-        actions_layout.addStretch()
-        actions_layout.addWidget(self.btn_licenzia)
-        
-        details_content_layout.addLayout(dati_layout)
-        details_content_layout.addSpacing(20)
-        details_content_layout.addWidget(QLabel("Assenze Programmate:"))
-        details_content_layout.addWidget(self.assenze_list_ui)
-        details_content_layout.addSpacing(10)
-        details_content_layout.addLayout(actions_layout)
-        
-        details_layout.addWidget(self.details_title)
-        details_layout.addWidget(self.details_content)
-        
-        main_area.addWidget(list_container, stretch=1)
-        main_area.addWidget(details_container, stretch=2)
+        # Stile Tabella
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+            }
+            QTableWidget::item {
+                padding: 15px;
+                border-bottom: 1px solid #f1f5f9;
+                color: #334155;
+                font-size: 15px;
+            }
+            QTableWidget::item:selected {
+                background-color: #f1f5f9;
+                color: #0f172a;
+            }
+            QHeaderView::section {
+                background-color: #f8fafc;
+                padding: 15px;
+                border: none;
+                border-bottom: 2px solid #e2e8f0;
+                font-weight: bold;
+                color: #64748b;
+                text-align: left;
+                font-size: 16px;
+            }
+        """)
 
         layout.addWidget(title)
         layout.addWidget(subtitle)
         layout.addSpacing(20)
         layout.addWidget(stats_container) # Aggiungo le card statistiche
         layout.addSpacing(10)
-        layout.addLayout(main_area)
+        layout.addWidget(action_bar)
+        layout.addWidget(self.table)
         
-        self.aggiorna_lista()
-        self.update_details_panel(None, None)
+        self.aggiorna_tabella()
+        self.aggiorna_statistiche()
+
+    def showEvent(self, event):
+        """Metodo chiamato automaticamente quando la pagina diventa visibile"""
+        super().showEvent(event)
+        self.aggiorna_tabella()
+        self.aggiorna_statistiche()
+
+    def aggiorna_statistiche(self):
+        tot_dip, tot_ferie, tot_cert = self.interfaccia.sistema_dipendenti.get_statistiche_oggi()
+        self.lbl_tot_dip.setText(str(tot_dip))
+        self.lbl_tot_ferie.setText(str(tot_ferie))
+        self.lbl_tot_cert.setText(str(tot_cert))
 
     def create_stat_card(self, titolo, valore, colore_bordo, icon_path):
-        """Crea un widget stile Card (simil React component)"""
+        """Crea un widget stile Card"""
         card = QWidget()
         card.setObjectName("stat_card")
         # Stile inline per la card specifica
@@ -274,50 +311,95 @@ class PersonaleView(QWidget):
         card_layout.addStretch()
         card_layout.addWidget(lbl_icona)
         
-        return card
+        return card, lbl_valore
 
-    def aggiorna_lista(self):
-        self.lista_ui.clear()
-        if not self.interfaccia:
-            return
-            
+    def aggiorna_tabella(self):
+        self.table.setRowCount(0)
         dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
+        search_text = self.search_input.text().lower()
+        
+        row = 0
         for dip in dipendenti:
-            testo = f"👤 {dip.id_dipendente} - {dip.nome} {dip.cognome}     (Stato: {dip.stato.name})"
-            item = QListWidgetItem(testo)
-            item.setData(Qt.ItemDataRole.UserRole, dip.id_dipendente)
-            self.lista_ui.addItem(item)
+            # Filtro ricerca
+            if search_text and (search_text not in dip.nome.lower() and search_text not in dip.cognome.lower()):
+                continue
+                
+            self.table.insertRow(row)
             
-    def update_details_panel(self, current_item, previous_item):
-        if not current_item:
-            self.details_title.setText("Seleziona un dipendente")
-            self.details_content.hide()
-            return
+            item_nome = QTableWidgetItem(dip.nome)
+            item_nome.setData(Qt.ItemDataRole.UserRole, dip.id_dipendente)
+            self.table.setItem(row, 0, item_nome)
+            self.table.setItem(row, 1, QTableWidgetItem(dip.cognome))
+            self.table.setItem(row, 2, QTableWidgetItem(f"{dip.ferie_rimanenti:.2f}"))
+            self.table.setItem(row, 3, QTableWidgetItem(f"{dip.rol_rimanenti:.2f}"))
+            self.table.setItem(row, 4, QTableWidgetItem(f"{dip.banca_ore:.2f}"))
             
-        id_dip = current_item.data(Qt.ItemDataRole.UserRole)
-        dip = self.interfaccia.sistema_dipendenti.get_dipendente(id_dip)
+            # Badge Stato (opzionale: colorato)
+            self.table.setItem(row, 5, QTableWidgetItem("")) # Item placeholder necessario per coerenza riga
+            self.table.setCellWidget(row, 5, self.create_status_pill(dip.stato.name))
+            
+            # Indicatore navigazione
+            self.table.setItem(row, 6, QTableWidgetItem("")) # Placeholder
+            self.table.setCellWidget(row, 6, self.create_arrow_icon())
+            
+            row += 1
+
+    def create_status_pill(self, stato):
+        widget = QWidget()
+        widget.setStyleSheet("background-color: transparent;") # Sfondo trasparente per il container
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        if not dip:
-            self.details_title.setText("Dipendente non trovato")
-            self.details_content.hide()
-            return
-            
-        self.details_title.setText(f"Dettagli di {dip.nome} {dip.cognome}")
-        self.details_content.show()
+        lbl = QLabel(stato)
+        lbl.setFixedSize(120, 30) # Dimensioni ottimizzate
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Aggiorna dati
-        self.lbl_ferie.setText(f"{dip.ferie_rimanenti:.2f}")
-        self.lbl_rol.setText(f"{dip.rol_rimanenti:.2f}")
-        self.lbl_banca_ore.setText(f"{dip.banca_ore:.2f}")
+        if stato == "ASSUNTO":
+            lbl.setStyleSheet("""
+                QLabel {
+                    background-color: #dcfce7; 
+                    border: 1px solid #a7f3d0;
+                    color: #166534; 
+                    border-radius: 15px;
+                    font-weight: bold;
+                    font-size: 13px;
+                }
+            """)
+        else:
+            lbl.setStyleSheet("""
+                QLabel {
+                    background-color: #f1f5f9; 
+                    border: 1px solid #e2e8f0;
+                    color: #64748b; 
+                    border-radius: 15px;
+                    font-weight: bold;
+                    font-size: 13px;
+                }
+            """)
         
-        # Aggiorna lista assenze
-        self.assenze_list_ui.clear()
-        for assenza in dip.assenze_programmate:
-            dt_inizio = datetime.strptime(assenza.data_inizio, "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%y %H:%M")
-            dt_fine = datetime.strptime(assenza.data_fine, "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%y %H:%M")
-            testo = f"[{assenza.tipo}] Dal {dt_inizio} al {dt_fine}"
-            self.assenze_list_ui.addItem(testo)
-            
+        layout.addWidget(lbl)
+        return widget
+
+    def create_arrow_icon(self):
+        widget = QWidget()
+        widget.setStyleSheet("background-color: transparent;")
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        icon_label = QLabel()
+        pixmap = QPixmap("./interfacciaGrafica/assets/arrow-forward.svg")
+        if not pixmap.isNull():
+            icon_label.setPixmap(pixmap.scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        
+        layout.addWidget(icon_label)
+        return widget
+
+    def on_row_clicked(self, row, col):
+        id_dip = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        self.apri_dettaglio_dipendente(id_dip)
+
     def cmd_assumi(self):
         dialog = AddDipendenteDialog(self)
         if dialog.exec():
@@ -325,62 +407,9 @@ class PersonaleView(QWidget):
             if nome and cognome:
                 # Chiama direttamente il sistema ignorando l'input console di interfacciaDirigente
                 self.interfaccia.sistema_dipendenti.assumi_dipendente(nome, cognome)
-                self.aggiorna_lista()
+                self.aggiorna_tabella()
+                self.aggiorna_statistiche()
     
-    def get_selected_dip_id(self):
-        selezionati = self.lista_ui.selectedItems()
-        if not selezionati:
-            QMessageBox.warning(self, "Attenzione", "Seleziona prima un dipendente dalla lista.")
-            return None
-        return selezionati[0].data(Qt.ItemDataRole.UserRole)
-
-    def cmd_licenzia(self):
-        id_dip = self.get_selected_dip_id()
-        if id_dip is None: return
-        
-        confirm = QMessageBox.question(self, "Conferma Licenziamento", f"Sei sicuro di voler licenziare il dipendente #{id_dip}?")
-        if confirm == QMessageBox.StandardButton.Yes:
-            success = self.interfaccia.sistema_dipendenti.rimuovi_dipendente(id_dip)
-            if success:
-                self.aggiorna_lista()
-                self.update_details_panel(None, None)
-            else:
-                QMessageBox.critical(self, "Errore", "Impossibile rimuovere il dipendente.")
-                
-    def cmd_modifica_dati(self):
-        id_dip = self.get_selected_dip_id()
-        if id_dip is None: return
-        
-        dip = self.interfaccia.sistema_dipendenti.get_dipendente(id_dip)
-        dialog = ModificaDatiDialog(dip, self)
-        
-        if dialog.exec():
-            ferie, rol, banca_ore = dialog.get_data()
-            success = self.interfaccia.sistema_dipendenti.modifica_dipendente(
-                id_dip, dip.nome, dip.cognome, ferie, rol, banca_ore
-            )
-            if success:
-                self.update_details_panel(self.lista_ui.currentItem(), None)
-            else:
-                QMessageBox.critical(self, "Errore", "Impossibile modificare i dati.")
-
-    def cmd_aggiungi_assenza(self):
-        id_dip = self.get_selected_dip_id()
-        if id_dip is None: return
-        
-        dialog = AddAssenzaDialog(self)
-        if dialog.exec():
-            tipo, dt_inizio, dt_fine = dialog.get_data()
-            if tipo and dt_inizio and dt_fine:
-                str_inizio = dt_inizio.strftime("%Y-%m-%d %H:%M:%S")
-                str_fine = dt_fine.strftime("%Y-%m-%d %H:%M:%S")
-                
-                success = self.interfaccia.sistema_dipendenti.aggiungi_assenza(
-                    id_dip, tipo, str_inizio, str_fine
-                )
-                if success:
-                    self.update_details_panel(self.lista_ui.currentItem(), None)
-                else:
-                    QMessageBox.critical(self, "Errore", "Impossibile aggiungere l'assenza.")
-            else:
-                QMessageBox.warning(self, "Dati non validi", "Il formato della data non è corretto.")
+    def apri_dettaglio_dipendente(self, id_dipendente):
+        """Apre la pagina di dettaglio del dipendente (Da implementare in futuro)"""
+        QMessageBox.information(self, "In lavorazione", f"La pagina di gestione del dipendente {id_dipendente} sarà disponibile a breve.")
