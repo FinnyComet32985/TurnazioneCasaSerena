@@ -1,6 +1,70 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedWidget
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPixmap, QIcon
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+    QStackedWidget, QMessageBox
+)
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QSize
+from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor, QPen, QPainterPath
+
+class BadgeWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(580) # Larghezza fissa per mantenere l'aspetto badge
+        # L'altezza si adatterà automaticamente al contenuto grazie al layout
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        lanyard_h = 50 # Spazio per il laccio sopra la card
+        width = self.width()
+        height = self.height()
+        
+        # Rettangolo del corpo del badge (parte bianca)
+        card_rect = QRectF(1, lanyard_h, width-2, height - lanyard_h - 1)
+        
+        # --- Coordinate e Penne ---
+        center_x = width / 2
+        hole_w = 60
+        hole_h = 8
+        hole_y = lanyard_h + 16
+        hole_rect = QRectF(center_x - hole_w/2, hole_y, hole_w, hole_h)
+        
+        back_strap_pen = QPen(QColor("#1e293b"), 8, cap=Qt.PenCapStyle.RoundCap) # Scuro
+        front_strap_pen = QPen(QColor("#475569"), 8, cap=Qt.PenCapStyle.RoundCap) # Chiaro
+
+        # --- 1. Laccio Posteriore (SCURO) ---
+        # Disegnato per primo, così sta dietro a tutto.
+        painter.setPen(back_strap_pen)
+        painter.drawLine(int(center_x + 15), 0, int(center_x), int(hole_y + 4))
+
+        # --- 2. Corpo della Card (Sfondo) ---
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("white"))
+        painter.drawRoundedRect(card_rect, 14, 14)
+
+        # --- 3. Accento Superiore (Striscia Blu) ---
+        painter.save()
+        path = QPainterPath()
+        path.addRoundedRect(card_rect, 14, 14)
+        painter.setClipPath(path)
+        painter.setBrush(QColor("#3b82f6"))
+        painter.drawRect(0, int(lanyard_h), int(width), 8)
+        painter.restore()
+
+        # --- 4. Bordo Card ---
+        border_pen = QPen(QColor("#cbd5e1"), 1)
+        painter.setPen(border_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(card_rect, 14, 14)
+        
+        # --- 5. Laccio Anteriore (CHIARO) ---
+        painter.setPen(front_strap_pen)
+        painter.drawLine(int(center_x - 15), 0, int(center_x), int(hole_y + 4))
+
+        # --- 6. Buco del Badge ---
+        painter.setBrush(QColor("#f1f5f9"))
+        painter.setPen(QPen(QColor("#e2e8f0"), 1))
+        painter.drawRoundedRect(hole_rect, 4, 4)
 
 class DettaglioDipendenteView(QWidget):
     back_requested = pyqtSignal()
@@ -39,33 +103,138 @@ class DettaglioDipendenteView(QWidget):
         header_layout.addStretch()
 
         # --- ID Card Widget ---
-        id_card = QWidget()
-        id_card.setObjectName("card_container")
-        id_card.setStyleSheet("#card_container { padding: 20px; }")
-        id_card_layout = QHBoxLayout(id_card)
-        id_card_layout.setSpacing(20)
+        id_card = BadgeWidget()
+        id_card.setObjectName("id_card")
+        
+        # Main vertical layout for the card to include the "hole"
+        card_main_v_layout = QVBoxLayout(id_card)
+        # Margine superiore aumentato (90) per non sovrapporre il contenuto al laccio/buco
+        # Margine inferiore ridotto (24) per adattarsi al contenuto
+        card_main_v_layout.setContentsMargins(24, 90, 24, 24)
+        card_main_v_layout.setSpacing(12)
+
+        # Layout for the main content (avatar, info, status)
+        id_card_content_layout = QHBoxLayout()
+        id_card_content_layout.setSpacing(24)
 
         self.lbl_avatar = QLabel()
-        self.lbl_avatar.setFixedSize(80, 80)
+        self.lbl_avatar.setFixedSize(84, 84)
         self.lbl_avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # --- Left side info ---
         info_layout = QVBoxLayout()
-        info_layout.setSpacing(5)
-        self.lbl_nome_cognome = QLabel()
-        self.lbl_nome_cognome.setStyleSheet("font-size: 24px; font-weight: bold; color: #0f172a;")
+        info_layout.setSpacing(2)
         
-        self.status_pill_container = QWidget() # Container for the pill
-        pill_layout = QHBoxLayout(self.status_pill_container)
-        pill_layout.setContentsMargins(0,0,0,0)
-        pill_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-
+        lbl_header = QLabel("CASA SERENA • STAFF")
+        lbl_header.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: bold; letter-spacing: 1px;")
+        
+        self.lbl_nome_cognome = QLabel()
+        self.lbl_nome_cognome.setStyleSheet("font-size: 26px; font-weight: 800; color: #0f172a;")
+        
+        self.lbl_matricola = QLabel()
+        self.lbl_matricola.setStyleSheet("color: #64748b; font-size: 14px; font-family: monospace; margin-bottom: 6px;")
+        
+        info_layout.addWidget(lbl_header)
         info_layout.addWidget(self.lbl_nome_cognome)
-        info_layout.addWidget(self.status_pill_container)
-        info_layout.addStretch()
+        info_layout.addWidget(self.lbl_matricola)
+        info_layout.addStretch() # Pushes content up
 
-        id_card_layout.addWidget(self.lbl_avatar)
-        id_card_layout.addLayout(info_layout)
-        id_card_layout.addStretch()
+        # --- Right side status ---
+        self.status_container_right = QWidget()
+        self.status_container_right.setObjectName("status_container_right")
+        self.status_container_right.setFixedSize(220, 84)
+        self.status_container_right.setStyleSheet("""
+            #status_container_right {
+                background-color: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+            }
+        """)
+        status_right_layout = QVBoxLayout(self.status_container_right)
+        status_right_layout.setContentsMargins(15, 15, 15, 15)
+        status_right_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        lbl_stato_title = QLabel("STATO ATTUALE")
+        lbl_stato_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_stato_title.setStyleSheet("color: #64748b; font-size: 11px; font-weight: bold; letter-spacing: 1px; border: none; background: transparent;")
+
+        self.lbl_stato_value = QLabel() # Value set in load_dipendente
+        self.lbl_stato_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        status_right_layout.addWidget(lbl_stato_title)
+        status_right_layout.addWidget(self.lbl_stato_value)
+
+        # Assemble the card content
+        id_card_content_layout.addWidget(self.lbl_avatar)
+        id_card_content_layout.addLayout(info_layout)
+        id_card_content_layout.addStretch()
+        id_card_content_layout.addWidget(self.status_container_right)
+
+        # Add hole and content to the main card layout
+        card_main_v_layout.addLayout(id_card_content_layout)
+
+        # --- Top Section (Card + Actions) ---
+        top_container = QWidget()
+        top_layout = QHBoxLayout(top_container)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(60) # Spazio tra card e bottoni aumentato
+
+        # Actions Column
+        actions_layout = QVBoxLayout()
+        actions_layout.setSpacing(15)
+        actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        actions_layout.setContentsMargins(0, 50, 0, 0) # Offset verticale per allineare al corpo card (escluso laccio)
+
+        self.btn_modifica = QPushButton("  Modifica Dati") # Aggiunti spazi per distanziare l'icona
+        self.btn_modifica.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_modifica.setIcon(QIcon("./interfacciaGrafica/assets/pencil.svg"))
+        self.btn_modifica.setIconSize(QSize(20, 20))
+        self.btn_modifica.setStyleSheet("""
+            QPushButton {
+                background-color: #3b82f6;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-weight: bold;
+                font-size: 15px;
+                min-width: 200px;
+                text-align: left; padding-left: 20px;
+            }
+            QPushButton:hover {
+                background-color: #2563eb;
+            }
+        """)
+        self.btn_modifica.clicked.connect(self.cmd_modifica)
+
+        self.btn_licenzia = QPushButton("  Licenzia Dipendente") # Aggiunti spazi per distanziare l'icona
+        self.btn_licenzia.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_licenzia.setIcon(QIcon("./interfacciaGrafica/assets/person-remove.svg"))
+        self.btn_licenzia.setIconSize(QSize(20, 20))
+        self.btn_licenzia.setStyleSheet("""
+            QPushButton {
+                background-color: #fee2e2;
+                color: #dc2626;
+                border: 1px solid #fecaca;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-weight: bold;
+                font-size: 15px;
+                min-width: 200px;
+                text-align: left; padding-left: 20px;
+            }
+            QPushButton:hover {
+                background-color: #fecaca;
+            }
+        """)
+        self.btn_licenzia.clicked.connect(self.cmd_licenzia)
+
+        actions_layout.addWidget(self.btn_modifica)
+        actions_layout.addWidget(self.btn_licenzia)
+
+        top_layout.addWidget(id_card)
+        top_layout.addLayout(actions_layout)
+        top_layout.addStretch()
 
         # --- Tab Bar ---
         tab_bar = QWidget()
@@ -75,9 +244,8 @@ class DettaglioDipendenteView(QWidget):
         
         self.btn_assenze = QPushButton("Assenze")
         self.btn_banca_ore = QPushButton("Banca Ore")
-        self.btn_contratto = QPushButton("Contratto e Licenziamento")
         
-        self.tab_buttons = [self.btn_assenze, self.btn_banca_ore, self.btn_contratto]
+        self.tab_buttons = [self.btn_assenze, self.btn_banca_ore]
         
         for i, btn in enumerate(self.tab_buttons):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -102,17 +270,12 @@ class DettaglioDipendenteView(QWidget):
         page_banca_ore.setLayout(QVBoxLayout())
         page_banca_ore.layout().addWidget(QLabel("Contenuto Banca Ore (da implementare)"))
         
-        page_contratto = QWidget()
-        page_contratto.setLayout(QVBoxLayout())
-        page_contratto.layout().addWidget(QLabel("Contenuto Contratto e Licenziamento (da implementare)"))
-        
         self.tab_content.addWidget(page_assenze)
         self.tab_content.addWidget(page_banca_ore)
-        self.tab_content.addWidget(page_contratto)
 
         # Add all widgets to main layout
         main_layout.addLayout(header_layout)
-        main_layout.addWidget(id_card)
+        main_layout.addWidget(top_container) # Contenitore Card + Bottoni
         main_layout.addWidget(tab_bar)
         main_layout.addWidget(underline)
         main_layout.addWidget(self.tab_content, stretch=1)
@@ -136,39 +299,31 @@ class DettaglioDipendenteView(QWidget):
         
         initials = (dip.nome[0] + dip.cognome[0]).upper()
         self.lbl_avatar.setText(initials)
-        self.lbl_avatar.setStyleSheet("background-color: #e0e7ff; color: #4338ca; border-radius: 12px; font-size: 32px; font-weight: bold;")
+        self.lbl_avatar.setStyleSheet("background-color: #eff6ff; color: #2563eb; border-radius: 12px; font-size: 32px; font-weight: bold; border: 1px solid #dbeafe;")
         
         self.lbl_nome_cognome.setText(f"{dip.nome} {dip.cognome}")
+        self.lbl_matricola.setText(f"ID: {str(dip.id_dipendente).zfill(5)}")
         
-        while self.status_pill_container.layout().count():
-            child = self.status_pill_container.layout().takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        
-        pill = self.create_status_pill(dip.stato.name)
-        self.status_pill_container.layout().addWidget(pill)
+        # Update the status on the right side
+        dip_stato = dip.stato.name
+        self.lbl_stato_value.setText(dip_stato)
+        if dip_stato == "ASSUNTO":
+            self.lbl_stato_value.setStyleSheet("color: #16a34a; font-size: 18px; font-weight: bold; border: none; background: transparent;")
+        else: # LICENZIATO
+            self.lbl_stato_value.setStyleSheet("color: #64748b; font-size: 18px; font-weight: bold; border: none; background: transparent;")
         
         self.switch_tab(0)
         
-    def create_status_pill(self, stato):
-        widget = QWidget()
-        widget.setStyleSheet("background-color: transparent;")
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    def cmd_modifica(self):
+        QMessageBox.information(self, "In Sviluppo", "La modifica dei dati anagrafici sarà disponibile a breve.")
+
+    def cmd_licenzia(self):
+        if not self.current_dip_id: return
         
-        dot = QLabel()
-        dot.setFixedSize(10, 10)
-        
-        lbl = QLabel(stato)
-        lbl.setStyleSheet("color: #0f172a; font-weight: 600; font-size: 14px;")
-        
-        if stato == "ASSUNTO":
-            dot.setStyleSheet("background-color: #16a34a; border-radius: 5px;")
-        else:
-            dot.setStyleSheet("background-color: #dc2626; border-radius: 5px;")
-        
-        layout.addWidget(dot)
-        layout.addWidget(lbl)
-        return widget
+        confirm = QMessageBox.question(self, "Conferma Licenziamento", "Sei sicuro di voler licenziare questo dipendente?")
+        if confirm == QMessageBox.StandardButton.Yes:
+            success = self.interfaccia.sistema_dipendenti.rimuovi_dipendente(self.current_dip_id)
+            if success:
+                self.back_requested.emit() # Torna alla lista
+            else:
+                QMessageBox.critical(self, "Errore", "Impossibile rimuovere il dipendente.")
