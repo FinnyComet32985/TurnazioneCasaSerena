@@ -45,13 +45,14 @@ class MainWindow(QMainWindow):
         logo_container = QWidget()
         logo_container.setObjectName("logo_container")
         logo_layout = QVBoxLayout(logo_container)
+        logo_layout.setContentsMargins(0, 0, 0, 0)
+        logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Creiamo un QLabel per contenere l'immagine del logo
         logo_label = QLabel()
         pixmap = QPixmap("./interfacciaGrafica/assets/logo.svg")
-        logo_label.setPixmap(pixmap)
-        logo_label.setScaledContents(True)
-        logo_label.setFixedHeight(60)
+        if not pixmap.isNull():
+            logo_label.setPixmap(pixmap.scaled(180, 50, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_layout.addWidget(logo_label)
         
@@ -83,8 +84,9 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addWidget(self.btn_turni)
         sidebar_layout.addWidget(self.btn_personale)
-        sidebar_layout.addWidget(self.btn_impostazioni)
         sidebar_layout.addStretch() 
+        sidebar_layout.addWidget(self.btn_impostazioni)
+        sidebar_layout.addSpacing(20)
         
         # --- CONTENUTO PRINCIPALE ---
         self.main_content = QStackedWidget()
@@ -130,7 +132,6 @@ class MainWindow(QMainWindow):
                 min-height: 80px;
                 max-height: 80px;
                 border-bottom: 1px solid #334155;
-                padding
             }
             QPushButton#sidebar_btn {
                 background-color: transparent;
