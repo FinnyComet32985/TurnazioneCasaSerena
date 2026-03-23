@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QStackedWidget,
     QMessageBox, QDialog, QLineEdit, QFormLayout,
     QComboBox, QDoubleSpinBox
 )
@@ -8,6 +8,9 @@ from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import Qt
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 from datetime import datetime
+
+# Import della nuova vista di dettaglio
+from .dettaglio_dipendente_view import DettaglioDipendenteView
 
 class AddDipendenteDialog(QDialog):
     def __init__(self, parent=None):
@@ -117,8 +120,17 @@ class PersonaleView(QWidget):
         self.init_ui()
         
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 40, 40, 40)
+        # Il layout principale ora è uno StackedWidget per la navigazione
+        self.main_stack = QStackedWidget()
+        
+        # --- Pagina 0: Lista Dipendenti (la vista attuale) ---
+        self.page_lista = QWidget()
+        layout_lista = QVBoxLayout(self.page_lista)
+        layout_lista.setContentsMargins(40, 40, 40, 40)
+
+        # --- Pagina 1: Dettaglio Dipendente ---
+        self.page_dettaglio = DettaglioDipendenteView(self.interfaccia)
+        self.page_dettaglio.back_requested.connect(self.torna_alla_lista)
         
         title = QLabel("Gestione Dipendenti")
         title.setObjectName("page_title")
@@ -246,14 +258,23 @@ class PersonaleView(QWidget):
             }
         """)
 
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addSpacing(20)
-        layout.addWidget(stats_container) # Aggiungo le card statistiche
-        layout.addSpacing(10)
-        layout.addWidget(action_bar)
-        layout.addWidget(self.table)
+        layout_lista.addWidget(title)
+        layout_lista.addWidget(subtitle)
+        layout_lista.addSpacing(20)
+        layout_lista.addWidget(stats_container) # Aggiungo le card statistiche
+        layout_lista.addSpacing(10)
+        layout_lista.addWidget(action_bar)
+        layout_lista.addWidget(self.table)
         
+        # Aggiungiamo le pagine allo stack
+        self.main_stack.addWidget(self.page_lista)
+        self.main_stack.addWidget(self.page_dettaglio)
+
+        # Il layout finale della PersonaleView contiene solo lo stack
+        final_layout = QVBoxLayout(self)
+        final_layout.setContentsMargins(0,0,0,0)
+        final_layout.addWidget(self.main_stack)
+
         self.aggiorna_tabella()
         self.aggiorna_statistiche()
 
@@ -261,7 +282,9 @@ class PersonaleView(QWidget):
         """Metodo chiamato automaticamente quando la pagina diventa visibile"""
         super().showEvent(event)
         self.aggiorna_tabella()
-        self.aggiorna_statistiche()
+        # Quando torniamo alla lista, aggiorniamo anche le statistiche
+        if self.main_stack.currentIndex() == 0:
+            self.aggiorna_statistiche()
 
     def aggiorna_statistiche(self):
         tot_dip, tot_ferie, tot_cert = self.interfaccia.sistema_dipendenti.get_statistiche_oggi()
@@ -399,6 +422,10 @@ class PersonaleView(QWidget):
     def on_row_clicked(self, row, col):
         id_dip = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
         self.apri_dettaglio_dipendente(id_dip)
+    
+    def torna_alla_lista(self):
+        self.main_stack.setCurrentIndex(0)
+        self.aggiorna_tabella() # Ricarica la tabella quando torni indietro
 
     def cmd_assumi(self):
         dialog = AddDipendenteDialog(self)
@@ -412,4 +439,7 @@ class PersonaleView(QWidget):
     
     def apri_dettaglio_dipendente(self, id_dipendente):
         """Apre la pagina di dettaglio del dipendente (Da implementare in futuro)"""
-        QMessageBox.information(self, "In lavorazione", f"La pagina di gestione del dipendente {id_dipendente} sarà disponibile a breve.")
+        # Carica i dati del dipendente nella vista di dettaglio
+        self.page_dettaglio.load_dipendente(id_dipendente)
+        # Passa alla pagina di dettaglio
+        self.main_stack.setCurrentIndex(1)
