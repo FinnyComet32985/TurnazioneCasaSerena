@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QDialog, QLineEdit, QFormLayout,
     QComboBox, QDoubleSpinBox
 )
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 from datetime import datetime
@@ -119,14 +120,32 @@ class PersonaleView(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(40, 40, 40, 40)
         
-        title = QLabel("Gestione Personale")
+        title = QLabel("Gestione Dipendenti")
         title.setObjectName("page_title")
-        subtitle = QLabel("Visualizza e gestisci l'anagrafica dei dipendenti")
+        subtitle = QLabel("Gestisci i dipendenti e monitora i rersidui di ferie e ROL")
         subtitle.setObjectName("page_subtitle")
         
+        # --- HEADER CARDS ---
+        stats_container = QWidget()
+        stats_layout = QHBoxLayout(stats_container)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        stats_layout.setSpacing(20)
+
+        # Recupero dati dal backend
+        tot_dip, tot_ferie, tot_cert = self.interfaccia.sistema_dipendenti.get_statistiche_oggi()
+
+        # Creazione Card
+        card_totale = self.create_stat_card("Totale Dipendenti", str(tot_dip), "#3b82f6", "./interfacciaGrafica/assets/id-card.svg")
+        card_ferie = self.create_stat_card("Ferie in corso", str(tot_ferie), "#f59e0b", "./interfacciaGrafica/assets/earth.svg")
+        card_cert = self.create_stat_card("Personale in Certificato", str(tot_cert), "#ef4444", "./interfacciaGrafica/assets/fitness.svg")
+
+        stats_layout.addWidget(card_totale)
+        stats_layout.addWidget(card_ferie)
+        stats_layout.addWidget(card_cert)
+
         # Area Principale (Lista a sinistra, Dettagli a destra)
         main_area = QHBoxLayout()
-        
+
         # --- Lista Dipendenti ---
         list_container = QWidget()
         list_container.setObjectName("card_container")
@@ -206,10 +225,56 @@ class PersonaleView(QWidget):
         layout.addWidget(title)
         layout.addWidget(subtitle)
         layout.addSpacing(20)
+        layout.addWidget(stats_container) # Aggiungo le card statistiche
+        layout.addSpacing(10)
         layout.addLayout(main_area)
         
         self.aggiorna_lista()
         self.update_details_panel(None, None)
+
+    def create_stat_card(self, titolo, valore, colore_bordo, icon_path):
+        """Crea un widget stile Card (simil React component)"""
+        card = QWidget()
+        card.setObjectName("stat_card")
+        # Stile inline per la card specifica
+        card.setStyleSheet(f"""
+            QWidget#stat_card {{
+                background-color: white;
+                border-radius: 8px;
+                border-left: 5px solid {colore_bordo};
+                border-top: 1px solid #e2e8f0;
+                border-right: 1px solid #e2e8f0;
+                border-bottom: 1px solid #e2e8f0;
+            }}
+        """)
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(20, 20, 20, 20)
+        card_layout.setSpacing(15)
+        
+        lbl_icona = QLabel()
+        pixmap = QPixmap(icon_path)
+        if not pixmap.isNull():
+            pixmap = pixmap.scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            lbl_icona.setPixmap(pixmap)
+        lbl_icona.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+        
+        lbl_titolo = QLabel(titolo)
+        lbl_titolo.setStyleSheet("color: #64748b; font-size: 16px; font-weight: 600;")
+        
+        lbl_valore = QLabel(valore)
+        lbl_valore.setStyleSheet("color: #0f172a; font-size: 24px; font-weight: bold;")
+        
+        text_layout.addWidget(lbl_titolo)
+        text_layout.addWidget(lbl_valore)
+        
+        card_layout.addLayout(text_layout)
+        card_layout.addStretch()
+        card_layout.addWidget(lbl_icona)
+        
+        return card
 
     def aggiorna_lista(self):
         self.lista_ui.clear()

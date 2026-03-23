@@ -198,3 +198,29 @@ class SistemaDipendenti:
             if dt_inizio <= data_check <= dt_fine:
                 return True
         return False
+
+    def get_statistiche_oggi(self) -> tuple[int, int, int]:
+        """Restituisce una tupla: (Totale Dipendenti, In Ferie Oggi, In Certificato Oggi)"""
+        totale = 0
+        ferie = 0
+        certificato = 0
+        
+        oggi = date.today()
+        fmt = "%Y-%m-%d %H:%M:%S"
+
+        for dip in self.dipendenti:
+            if dip.stato == StatoDipendente.ASSUNTO:
+                totale += 1
+                
+                # Controlliamo se è in assenza OGGI
+                for ass in dip.assenze_programmate:
+                    dt_inizio = datetime.strptime(ass.data_inizio, fmt).date()
+                    dt_fine = datetime.strptime(ass.data_fine, fmt).date()
+                    
+                    if dt_inizio <= oggi <= dt_fine:
+                        if ass.tipo == TipoAssenza.FERIE.value:
+                            ferie += 1
+                        elif ass.tipo == TipoAssenza.CERTIFICATO.value:
+                            certificato += 1
+        
+        return totale, ferie, certificato

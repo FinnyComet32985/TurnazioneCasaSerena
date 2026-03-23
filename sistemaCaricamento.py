@@ -38,11 +38,11 @@ def load_dipendenti() -> SistemaDipendenti:
 
         for assenza_row in assenze_rows:
             sistema.ripristina_assenza(
-                id_dipendente=dipendente_row[0],
+                id_dipendente=assenza_row[1],
                 id_assenza=assenza_row[0],
-                tipo_assenza_str=assenza_row[1], # Assumo che row[1] sia il tipo come nel codice precedente
-                data_inizio=assenza_row[2],
-                data_fine=assenza_row[3]
+                tipo_assenza_str=assenza_row[2],
+                data_inizio=assenza_row[3],
+                data_fine=assenza_row[4]
             )
     
     connection.close()

@@ -48,11 +48,10 @@ class MainWindow(QMainWindow):
         
         # Creiamo un QLabel per contenere l'immagine del logo
         logo_label = QLabel()
-        # Assicurati di avere un file logo.png (o altro formato) nel percorso specificato
         pixmap = QPixmap("./interfacciaGrafica/assets/logo.svg")
         logo_label.setPixmap(pixmap)
-        logo_label.setScaledContents(True) # Permette all'immagine di scalare con il QLabel
-        logo_label.setFixedHeight(60) # Impostiamo un'altezza fissa per il logo
+        logo_label.setScaledContents(True)
+        logo_label.setFixedHeight(60)
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_layout.addWidget(logo_label)
         
@@ -158,7 +157,7 @@ class MainWindow(QMainWindow):
                 border-left: 4px solid #3b82f6;
             }
             #main_content {
-                background-color: #f8fafc;
+                background-color: #f8fafb;
             }
             #page_title {
                 color: #0f172a;
