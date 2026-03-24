@@ -8,8 +8,8 @@ from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import Qt, QSize, QDate, QRect
 from datetime import datetime, date, timedelta
 
-# Importiamo TipoFascia per accedere ai riferimenti dei turni
-from sistemaTurnazione.fasciaOraria import TipoFascia
+# Import per accedere ai riferimenti
+from sistemaTurnazione.fasciaOraria import TipoFascia, StatoFascia
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 
 class AssignTurnoDialog(QDialog):
@@ -285,8 +285,9 @@ class TurniView(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(20)
+        self.setMinimumWidth(1100)
         
         # --- HEADER NAVIGATION ---
         header_layout = QHBoxLayout()
@@ -341,6 +342,36 @@ class TurniView(QWidget):
         
         header_layout.addStretch()
         layout.addLayout(header_layout)
+
+        # --- ACTION BUTTONS (MOVED TO HEADER) ---
+        action_btn_layout = QHBoxLayout()
+        action_btn_layout.setSpacing(10)
+        btn_style_header = """
+            QPushButton {
+                background-color: white; border: 1px solid #cbd5e1; border-radius: 6px;
+                padding: 8px 16px; font-weight: bold; color: #334155; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #f8fafc; border-color: #94a3b8; }
+        """
+        approve_style = """
+            QPushButton {
+                background-color: #f0fdf4; border: 1px solid #a7f3d0; border-radius: 6px;
+                padding: 8px 16px; font-weight: bold; color: #166534; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #dcfce7; border-color: #6ee7b7; }
+        """
+        self.btn_modifica = QPushButton("✏️ Modifica")
+        self.btn_approva = QPushButton("✅ Approva")
+        self.btn_pdf = QPushButton("📄 Esporta")
+        
+        self.btn_modifica.setStyleSheet(btn_style_header)
+        self.btn_approva.setStyleSheet(approve_style)
+        self.btn_pdf.setStyleSheet(btn_style_header)
+
+        action_btn_layout.addWidget(self.btn_modifica)
+        action_btn_layout.addWidget(self.btn_approva)
+        action_btn_layout.addWidget(self.btn_pdf)
+        header_layout.addLayout(action_btn_layout)
 
         # --- DASHBOARD CARD ---
         dashboard_layout = QHBoxLayout()
@@ -406,6 +437,16 @@ class TurniView(QWidget):
         lbl_abs_title.setStyleSheet("color: #64748b; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;")
         abs_layout_card.addWidget(lbl_abs_title)
         
+        # Header Colonne Assenze
+        abs_header = QHBoxLayout()
+        abs_header.setContentsMargins(0, 5, 0, 5)
+        abs_header.addWidget(QLabel("DIPENDENTE"), stretch=2)
+        abs_header.addWidget(QLabel("TIPO"), stretch=1)
+        abs_header.addWidget(QLabel("PERIODO"), stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
+        # Applichiamo uno stile leggero per gli header
+        for i in range(abs_header.count()): abs_header.itemAt(i).widget().setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: bold;")
+        abs_layout_card.addLayout(abs_header)
+
         # Lista scrollabile
         scroll_abs = QScrollArea()
         scroll_abs.setWidgetResizable(True)
@@ -421,47 +462,11 @@ class TurniView(QWidget):
         scroll_abs.setWidget(abs_content)
         abs_layout_card.addWidget(scroll_abs)
         
-        dashboard_layout.addWidget(abs_card, stretch=2)
-
-        # Bottoni Azione
-        btns_container = QVBoxLayout()
-        btns_container.setSpacing(15)
-        
-        btn_style = """
-            QPushButton {
-                background-color: white;
-                border: 1px solid #cbd5e1;
-                border-radius: 8px;
-                padding: 15px;
-                text-align: left;
-                font-weight: bold;
-                color: #334155;
-            }
-            QPushButton:hover {
-                background-color: #f8fafc;
-                border-color: #94a3b8;
-                color: #0f172a;
-            }
-        """
-        
-        self.btn_modifica = QPushButton("✏️  Modifica")
-        self.btn_modifica.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_modifica.setStyleSheet(btn_style)
-        
-        self.btn_approva = QPushButton("✅  Approva")
-        self.btn_approva.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_approva.setStyleSheet(btn_style)
-        
-        self.btn_pdf = QPushButton("📄  Esporta PDF")
-        self.btn_pdf.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_pdf.setStyleSheet(btn_style)
-        
-        btns_container.addWidget(self.btn_modifica)
-        btns_container.addWidget(self.btn_approva)
-        btns_container.addWidget(self.btn_pdf)
-        btns_container.addStretch()
-        
-        dashboard_layout.addLayout(btns_container, stretch=1)
+        # Card 3: Riepilogo Settimanale
+        self.summary_card = self.create_summary_card()
+        dashboard_layout.addWidget(active_card)
+        dashboard_layout.addWidget(abs_card, stretch=1)
+        dashboard_layout.addWidget(self.summary_card, stretch=1)
         
         layout.addLayout(dashboard_layout)
 
@@ -590,6 +595,12 @@ class TurniView(QWidget):
         active_count = sum(1 for d in dipendenti if d.stato.name == "ASSUNTO")
         self.lbl_active_count.setText(str(active_count))
 
+        # Aggiorna le due liste dinamiche
+        self.update_current_absences(dipendenti)
+        self.update_weekly_summary(dipendenti)
+
+    def update_current_absences(self, dipendenti):
+
         # 2. Assenze Correnti (che intersecano la settimana visualizzata)
         week_start = datetime.combine(self.current_monday, datetime.min.time())
         week_end = datetime.combine(self.current_monday + timedelta(days=6), datetime.max.time())
@@ -628,8 +639,8 @@ class TurniView(QWidget):
         h_layout.setContentsMargins(0, 0, 0, 0)
         h_layout.setSpacing(10)
         
-        lbl_name = QLabel(f"{dip.nome} {dip.cognome}")
-        lbl_name.setStyleSheet("font-weight: 600; color: #334155;")
+        lbl_name = QLabel(f"{dip.nome} {dip.cognome}") 
+        lbl_name.setStyleSheet("font-weight: 600; color: #334155;") 
         
         tipo = TipoAssenza(ass.tipo)
         pill = QLabel(tipo.value)
@@ -651,12 +662,165 @@ class TurniView(QWidget):
         lbl_dates.setStyleSheet("color: #64748b; font-size: 12px;")
         lbl_dates.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
-        h_layout.addWidget(lbl_name)
-        h_layout.addWidget(pill)
-        h_layout.addStretch()
-        h_layout.addWidget(lbl_dates)
+        h_layout.addWidget(lbl_name, stretch=2) # Stretch per allineare con header
+        h_layout.addWidget(pill, stretch=1)
+        # h_layout.addStretch() # Rimosso per usare stretch factor
+        h_layout.addWidget(lbl_dates, stretch=1)
         
         self.abs_layout.addWidget(item)
+
+    def update_weekly_summary(self, dipendenti):
+        anno, settimana, _ = self.current_monday.isocalendar()
+        settimana_key = (anno, settimana)
+        settimana_dict = self.interfaccia.turnazione.get_turnazione_settimana(settimana_key)
+
+        # Svuota lista attuale
+        while self.summary_layout.count():
+            child = self.summary_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        if not settimana_dict:
+            lbl_none = QLabel("Nessun turno da riepilogare.")
+            lbl_none.setStyleSheet("color: #94a3b8; font-style: italic; margin-top: 10px;")
+            lbl_none.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.summary_layout.addWidget(lbl_none)
+            return
+
+        # Verifica se la settimana è APPROVATA
+        is_approved = False
+        for giorno_dict in settimana_dict.values():
+            for fascia in giorno_dict.values():
+                if fascia.stato == StatoFascia.APPROVATA:
+                    is_approved = True
+                    break
+            if is_approved: break
+
+        # Trova tutti i dipendenti coinvolti
+        dipendenti_coinvolti_ids = set()
+        for giorno_dict in settimana_dict.values():
+            for fascia in giorno_dict.values():
+                for assegnazione in fascia.assegnazioni:
+                    dipendenti_coinvolti_ids.add(assegnazione.dipendente.id_dipendente)
+        
+        for dip_id in sorted(list(dipendenti_coinvolti_ids)):
+            dip = self.interfaccia.sistema_dipendenti.get_dipendente(dip_id)
+            if not dip: continue
+
+            ore_effettive = self.interfaccia.turnazione._get_ore_lavorate_settimana(dip_id, settimana_key)
+            delta = ore_effettive - self.interfaccia.turnazione.MAX_ORE
+
+            summary_item = self.create_summary_item(dip, ore_effettive, delta, is_approved)
+            self.summary_layout.addWidget(summary_item)
+
+    def create_summary_card(self):
+        card = QFrame()
+        card.setObjectName("summary_card")
+        card.setStyleSheet("#summary_card { background-color: white; border: 1px solid #e2e8f0; border-radius: 12px; }")
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Header
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        title = QLabel("RIEPILOGO")
+        title.setStyleSheet("color: #64748b; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;")
+        
+        info_badge = QWidget()
+        info_badge.setStyleSheet("background-color: #eff6ff; border-radius: 4px;")
+        badge_layout = QHBoxLayout(info_badge)
+        badge_layout.setContentsMargins(6, 4, 8, 4)
+        badge_layout.setSpacing(5)
+        
+        icon = QLabel()
+        pix = QPixmap("./interfacciaGrafica/assets/information-circle.svg")
+        p = QPainter(pix)
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        p.fillRect(pix.rect(), QColor("#3b82f6"))
+        p.end()
+        icon.setPixmap(pix.scaled(14, 14, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        
+        badge_text = QLabel("Base contrattuale: 38h")
+        badge_text.setStyleSheet("color: #3b82f6; font-size: 11px; font-weight: 600; background: transparent;")
+        
+        badge_layout.addWidget(icon)
+        badge_layout.addWidget(badge_text)
+        
+        header.addWidget(title)
+        header.addStretch()
+        header.addWidget(info_badge)
+        layout.addLayout(header)
+
+        # Header Colonne Riepilogo
+        summary_header = QHBoxLayout()
+        summary_header.setContentsMargins(0, 10, 0, 5)
+        summary_header.addWidget(QLabel("DIPENDENTE"))
+        summary_header.addStretch()
+        summary_header.addWidget(QLabel("ORE TOT."))
+        summary_header.addWidget(QLabel("STATO"), alignment=Qt.AlignmentFlag.AlignRight)
+        for i in range(summary_header.count()): 
+            w = summary_header.itemAt(i).widget()
+            if w:
+                w.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: bold;")
+        layout.addLayout(summary_header)
+
+        # Scroll Area per la lista
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none; background: transparent;")
+        
+        content = QWidget()
+        self.summary_layout = QVBoxLayout(content)
+        self.summary_layout.setContentsMargins(0, 5, 0, 0)
+        self.summary_layout.setSpacing(8)
+        self.summary_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+        
+        return card
+
+    def create_summary_item(self, dip, ore, delta, is_approved):
+        item = QWidget()
+        layout = QHBoxLayout(item)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setSpacing(10)
+        
+        lbl_name = QLabel(f"<b>{dip.nome} {dip.cognome}</b>")
+        lbl_name.setStyleSheet("color: #334155;")
+        layout.addWidget(lbl_name)
+        
+        layout.addStretch()
+        
+        lbl_ore = QLabel(f"{ore:.2f}h")
+        lbl_ore.setStyleSheet("color: #334155;")
+        layout.addWidget(lbl_ore)
+        
+        pill = QLabel()
+        pill.setFixedWidth(120) # Larghezza fissa per allineamento
+        pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        if not is_approved:
+            # Se non approvato, mostra stato provvisorio
+            pill.setText("In Corso")
+            pill.setStyleSheet("background-color: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
+        else:
+            # Se approvato, mostra il calcolo banca ore effettivo
+            if delta > 0:
+                pill.setText(f"Banca Ore (+{delta:.2f}h)")
+                # Arancione deciso per differenziare dai ROL (giallo/ambra)
+                pill.setStyleSheet("background-color: #ffedd5; color: #c2410c; border: 1px solid #fdba74; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
+            elif delta < 0:
+                pill.setText(f"Banca Ore (-{abs(delta):.2f}h)")
+                # Stesso arancione per coerenza "Banca Ore", indicando debito
+                pill.setStyleSheet("background-color: #ffedd5; color: #c2410c; border: 1px solid #fdba74; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
+            else:
+                pill.setText("In Regola")
+                pill.setStyleSheet("background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
+        
+        layout.addWidget(pill)
+        return item
 
     def create_day_widget(self, dt: date):
         # Usa la nuova classe DayWidget che gestisce il disegno in modo corretto
