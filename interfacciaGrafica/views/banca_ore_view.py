@@ -75,9 +75,9 @@ class BancaOreView(QWidget):
         
         scroll_area.setWidget(scroll_content)
         
-        self.info_card = self.create_info_card()
+        # self.info_card = self.create_info_card() # NASCOSTO TEMPORANEAMENTE
         self.overlay_layout.addWidget(scroll_area, 0, 0)
-        # La info_card viene posizionata dinamicamente nel resizeEvent
+        # info_card posizionata dinamicamente (Disabilitato)
 
         right_layout.addWidget(overlay_container)
 
@@ -96,6 +96,8 @@ class BancaOreView(QWidget):
             self.update_info_card_position()
             
     def update_info_card_position(self):
+        if not hasattr(self, 'info_card'): return
+
         # Rimuove dal layout precedente (senza eliminare l'oggetto)
         self.info_card.setParent(None)
         
@@ -190,11 +192,11 @@ class BancaOreView(QWidget):
         layout.addSpacing(20)
 
         # Bottone Regola
-        btn_regola = QPushButton("  Regola saldo ore")
-        btn_regola.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_regola.setIcon(QIcon("./interfacciaGrafica/assets/options.svg"))
-        btn_regola.setIconSize(QSize(20, 20))
-        btn_regola.setStyleSheet("""
+        self.btn_regola = QPushButton("  Regola saldo ore")
+        self.btn_regola.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_regola.setIcon(QIcon("./interfacciaGrafica/assets/options.svg"))
+        self.btn_regola.setIconSize(QSize(20, 20))
+        self.btn_regola.setStyleSheet("""
             QPushButton {
                 background-color: rgba(255,255,255,0.2);
                 color: white;
@@ -208,8 +210,8 @@ class BancaOreView(QWidget):
                 background-color: rgba(255,255,255,0.3);
             }
         """)
-        btn_regola.clicked.connect(self.cmd_regola_saldo)
-        layout.addWidget(btn_regola)
+        self.btn_regola.clicked.connect(self.cmd_regola_saldo)
+        layout.addWidget(self.btn_regola)
 
         return card
 
@@ -311,6 +313,11 @@ class BancaOreView(QWidget):
         if not dip: return
 
         # Aggiorna Saldo
+        if dip.stato.name == "LICENZIATO":
+            self.btn_regola.setVisible(False)
+        else:
+            self.btn_regola.setVisible(True)
+
         self.lbl_saldo.setText(f"{dip.banca_ore:+.2f}")
 
         # --- Mock Storico (Simulazione) ---

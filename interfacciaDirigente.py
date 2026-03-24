@@ -53,6 +53,19 @@ class InterfacciaDirigente:
         else:
             print("Errore durante la rimozione")
 
+    def riassumi_dipendente(self):
+        id_input = input("id del dipendente da riassumere: ")
+        
+        if not id_input.isdigit():
+            print("Errore: L'ID deve essere un numero intero.")
+            return
+
+        result = self.sistema_dipendenti.riassumi_dipendente(int(id_input))
+
+        if result is True:
+            print("Dipendente riassunto con successo")
+        else:
+            print("Errore durante la riassunzione")
 
     def modifica_dipendente(self):
         pass

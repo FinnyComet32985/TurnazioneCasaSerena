@@ -43,6 +43,18 @@ class SistemaDipendenti:
         else:
             return False
 
+    def riassumi_dipendente(self, id_dipendente: int):
+        result = sistemaSalvataggio.riassumi_dipendente(id_dipendente)
+        if result is True:
+            # Cerchiamo l'oggetto dipendente nella lista controllando l'attributo id_dipendente
+            for dipendente in self.dipendenti:
+                if dipendente.id_dipendente == id_dipendente:
+                    dipendente.stato = StatoDipendente.ASSUNTO
+                    break
+            return True
+        else:
+            return False
+
     def get_lista_dipendenti(self):
         return self.dipendenti
 

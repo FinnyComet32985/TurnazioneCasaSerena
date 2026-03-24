@@ -64,22 +64,22 @@ class AssenzeView(QWidget):
         title = QLabel("Assenze Programmate")
         title.setStyleSheet("font-size: 20px; font-weight: bold; color: #0f172a;")
         
-        btn_add = QPushButton("  Aggiungi Assenza")
-        btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_add.setIcon(QIcon("./interfacciaGrafica/assets/add-circle.svg"))
-        btn_add.setIconSize(QSize(20, 20))
-        btn_add.setStyleSheet("""
+        self.btn_add = QPushButton("  Aggiungi Assenza")
+        self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_add.setIcon(QIcon("./interfacciaGrafica/assets/add-circle.svg"))
+        self.btn_add.setIconSize(QSize(20, 20))
+        self.btn_add.setStyleSheet("""
             QPushButton {
                 background-color: #3b82f6; color: white; border: none;
                 padding: 10px 24px; border-radius: 8px; font-weight: bold; font-size: 15px;
             }
             QPushButton:hover { background-color: #2563eb; }
         """)
-        btn_add.clicked.connect(self.cmd_add_assenza)
+        self.btn_add.clicked.connect(self.cmd_add_assenza)
 
         header_layout.addWidget(title)
         header_layout.addStretch()
-        header_layout.addWidget(btn_add)
+        header_layout.addWidget(self.btn_add)
 
         # --- Body (Riepilogo a sx, Lista a dx) ---
         body_layout = QHBoxLayout()
@@ -117,10 +117,10 @@ class AssenzeView(QWidget):
         self.lista_assenze_layout.setContentsMargins(0, 0, 0, 100) # Spazio per non coprire l'ultimo elemento
         
         scroll_area.setWidget(scroll_content)
-        self.info_card = self.create_info_card()
+        # self.info_card = self.create_info_card() # NASCOSTO TEMPORANEAMENTE
 
         self.overlay_layout.addWidget(scroll_area, 0, 0)
-        # info_card posizionata dinamicamente
+        # info_card posizionata dinamicamente (Disabilitato)
         
         body_layout.addWidget(overlay, stretch=1)
 
@@ -137,6 +137,8 @@ class AssenzeView(QWidget):
             self.update_info_card_position()
             
     def update_info_card_position(self):
+        if not hasattr(self, 'info_card'): return
+
         self.info_card.setParent(None)
         
         if self.is_large_layout:
@@ -205,11 +207,11 @@ class AssenzeView(QWidget):
             painter.fillRect(pix_pencil.rect(), QColor("#3b82f6"))
             painter.end()
 
-        btn_modifica = QPushButton("  Modifica")
-        btn_modifica.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_modifica.setIcon(QIcon(pix_pencil))
-        btn_modifica.setIconSize(QSize(14, 14))
-        btn_modifica.setStyleSheet("""
+        self.btn_modifica = QPushButton("  Modifica")
+        self.btn_modifica.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_modifica.setIcon(QIcon(pix_pencil))
+        self.btn_modifica.setIconSize(QSize(14, 14))
+        self.btn_modifica.setStyleSheet("""
             QPushButton {
                 color: #3b82f6;
                 background: transparent;
@@ -219,11 +221,11 @@ class AssenzeView(QWidget):
             }
             QPushButton:hover { text-decoration: underline; }
         """)
-        btn_modifica.clicked.connect(self.cmd_modifica_resoconto)
+        self.btn_modifica.clicked.connect(self.cmd_modifica_resoconto)
 
         header_layout.addWidget(title_lbl)
         header_layout.addStretch()
-        header_layout.addWidget(btn_modifica)
+        header_layout.addWidget(self.btn_modifica)
         layout.addLayout(header_layout)
 
         layout.addSpacing(10)
@@ -366,6 +368,14 @@ class AssenzeView(QWidget):
         dip = self.interfaccia.sistema_dipendenti.get_dipendente(id_dipendente)
         if not dip: return
 
+        # Gestione visibilità bottoni in base allo stato
+        is_attivo = dip.stato.name == "ASSUNTO"
+        self.btn_add.setVisible(is_attivo)
+        # Se il bottone modifica esiste (è stato creato in create_riepilogo_ui), lo gestiamo
+        if hasattr(self, 'btn_modifica'):
+             self.btn_modifica.setVisible(is_attivo)
+
+
         # --- Aggiorna Riepilogo ---
         # Valori massimi basati su CCNL (26gg ferie, 32h ROL)
         FERIE_ANNUE = 26
@@ -389,7 +399,25 @@ class AssenzeView(QWidget):
             if child.widget():
                 child.widget().deleteLater()
 
-        if not assenze:
+        # Filtra assenze (Future/Presenti vs Passate)
+        now = datetime.now()
+        fmt = "%Y-%m-%d %H:%M:%S"
+        
+        future = []
+        past = []
+        
+        for a in assenze:
+            try:
+                # Consideriamo passata se la data fine è precedente a ora
+                dt_fine = datetime.strptime(a.data_fine, fmt)
+                if dt_fine < now:
+                    past.append(a)
+                else:
+                    future.append(a)
+            except ValueError:
+                future.append(a) # Fallback in caso di errore data
+
+        if not future and not past:
             self.lista_assenze_layout.setContentsMargins(0, 0, 0, 0)
             self.lista_assenze_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl_empty = QLabel("Nessuna assenza programmata.")
@@ -397,11 +425,50 @@ class AssenzeView(QWidget):
             lbl_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.lista_assenze_layout.addWidget(lbl_empty)
         else:
-            self.lista_assenze_layout.setContentsMargins(0, 0, 0, 100)
+            # Margine ridotto dato che la card info è nascosta
+            self.lista_assenze_layout.setContentsMargins(0, 0, 0, 20)
             self.lista_assenze_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-            for assenza in sorted(assenze, key=lambda a: a.data_inizio, reverse=True):
+            
+            # Assenze Future: Ordinate dalla più vicina (reverse=False)
+            for assenza in sorted(future, key=lambda a: a.data_inizio, reverse=False):
                 card = self.create_assenza_card(assenza)
                 self.lista_assenze_layout.addWidget(card)
+
+            # Se ci sono assenze passate, mostra bottone toggle
+            if past:
+                self.btn_toggle_past = QPushButton("Visualizza assenze passate ▼")
+                self.btn_toggle_past.setCursor(Qt.CursorShape.PointingHandCursor)
+                self.btn_toggle_past.setStyleSheet("""
+                    QPushButton {
+                        border: none; background: transparent; color: #64748b;
+                        font-weight: bold; font-size: 14px; padding: 10px; margin-top: 10px;
+                    }
+                    QPushButton:hover { color: #3b82f6; background-color: #f8fafc; border-radius: 6px; }
+                """)
+                self.btn_toggle_past.clicked.connect(self.toggle_past_assenze)
+                self.lista_assenze_layout.addWidget(self.btn_toggle_past)
+                
+                self.container_past = QWidget()
+                self.layout_past = QVBoxLayout(self.container_past)
+                self.layout_past.setContentsMargins(0, 0, 0, 0)
+                self.layout_past.setSpacing(15)
+                
+                # Assenze Passate: Ordinate dalla più recente (reverse=True)
+                for assenza in sorted(past, key=lambda a: a.data_inizio, reverse=True):
+                    card = self.create_assenza_card(assenza)
+                    # Opzionale: Rendi le card passate leggermente trasparenti o diverse
+                    self.layout_past.addWidget(card)
+                    
+                self.container_past.setVisible(False)
+                self.lista_assenze_layout.addWidget(self.container_past)
+
+    def toggle_past_assenze(self):
+        if self.container_past.isVisible():
+            self.container_past.hide()
+            self.btn_toggle_past.setText("Visualizza assenze passate ▼")
+        else:
+            self.container_past.show()
+            self.btn_toggle_past.setText("Nascondi assenze passate ▲")
 
     def create_assenza_card(self, assenza):
         card = QWidget()

@@ -231,7 +231,7 @@ class DettaglioDipendenteView(QWidget):
                 background-color: #fecaca;
             }
         """)
-        self.btn_licenzia.clicked.connect(self.cmd_licenzia)
+        # Il connect viene gestito dinamicamente in load_dipendente
 
         actions_layout.addWidget(self.btn_modifica)
         actions_layout.addWidget(self.btn_licenzia)
@@ -308,8 +308,64 @@ class DettaglioDipendenteView(QWidget):
         self.lbl_stato_value.setText(dip_stato)
         if dip_stato == "ASSUNTO":
             self.lbl_stato_value.setStyleSheet("color: #16a34a; font-size: 18px; font-weight: bold; border: none; background: transparent;")
+            
+            # Configurazione bottoni per dipendente ATTIVO
+            self.btn_modifica.setVisible(True)
+            
+            self.btn_licenzia.setText("  Licenzia Dipendente")
+            self.btn_licenzia.setIcon(QIcon("./interfacciaGrafica/assets/person-remove.svg"))
+            self.btn_licenzia.setStyleSheet("""
+                QPushButton {
+                    background-color: #fee2e2;
+                    color: #dc2626;
+                    border: 1px solid #fecaca;
+                    border-radius: 8px;
+                    padding: 12px 24px;
+                    font-weight: bold;
+                    font-size: 15px;
+                    min-width: 200px;
+                    text-align: left; padding-left: 20px;
+                }
+                QPushButton:hover { background-color: #fecaca; }
+            """)
+            try: self.btn_licenzia.clicked.disconnect() 
+            except TypeError: pass
+            self.btn_licenzia.clicked.connect(self.cmd_licenzia)
+            
         else: # LICENZIATO
             self.lbl_stato_value.setStyleSheet("color: #64748b; font-size: 18px; font-weight: bold; border: none; background: transparent;")
+            
+            # Configurazione bottoni per dipendente LICENZIATO
+            self.btn_modifica.setVisible(False)
+            
+            self.btn_licenzia.setText("  Assumi Nuovamente")
+            
+            # Ricolora l'icona in verde per matchare il testo
+            pix_add = QPixmap("./interfacciaGrafica/assets/person-add.svg")
+            if not pix_add.isNull():
+                painter = QPainter(pix_add)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                painter.fillRect(pix_add.rect(), QColor("#166534"))
+                painter.end()
+                self.btn_licenzia.setIcon(QIcon(pix_add))
+
+            self.btn_licenzia.setStyleSheet("""
+                QPushButton {
+                    background-color: #dcfce7;
+                    color: #166534;
+                    border: 1px solid #bbf7d0;
+                    border-radius: 8px;
+                    padding: 12px 24px;
+                    font-weight: bold;
+                    font-size: 15px;
+                    min-width: 200px;
+                    text-align: left; padding-left: 20px;
+                }
+                QPushButton:hover { background-color: #bbf7d0; }
+            """)
+            try: self.btn_licenzia.clicked.disconnect() 
+            except TypeError: pass
+            self.btn_licenzia.clicked.connect(self.cmd_riassumi)
         
         # Carica i dati nella tab delle assenze
         self.page_assenze.load_data(self.current_dip_id)
@@ -319,6 +375,17 @@ class DettaglioDipendenteView(QWidget):
         
     def cmd_modifica(self):
         QMessageBox.information(self, "In Sviluppo", "La modifica dei dati anagrafici sarà disponibile a breve.")
+
+    def cmd_riassumi(self):
+        if not self.current_dip_id: return
+        
+        confirm = QMessageBox.question(self, "Conferma Riassunzione", "Sei sicuro di voler assumere nuovamente questo dipendente?")
+        if confirm == QMessageBox.StandardButton.Yes:
+            success = self.interfaccia.sistema_dipendenti.riassumi_dipendente(self.current_dip_id)
+            if success:
+                self.load_dipendente(self.current_dip_id) # Ricarica la UI aggiornando stato e bottoni
+            else:
+                QMessageBox.critical(self, "Errore", "Impossibile riassumere il dipendente.")
 
     def cmd_licenzia(self):
         if not self.current_dip_id: return

@@ -37,6 +37,24 @@ def remove_dipendente(id_dipendente) -> bool:
     connection.close()
     return res
 
+#  riassunzione dipendente
+def riassumi_dipendente(id_dipendente) -> bool:
+    connection = sqlite3.connect('./db/turnazione.db')
+    cursor = connection.cursor()
+
+    query = "UPDATE dipendente SET stato = 'ASSUNTO' WHERE idDipendente = ?"
+    cursor.execute(query, (id_dipendente,))
+    
+    connection.commit()
+
+    if cursor.rowcount > 0:
+        res = True
+    else:
+        res = False
+    
+    connection.close()
+    return res
+
 #* SISTEMA ASSENZE
 #  salvataggio nuova assenza
 def save_assenza(id_dipendente: int, tipo_assenza: str, data_inizio, data_fine) -> int | bool:
