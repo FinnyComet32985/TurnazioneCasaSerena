@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QTableWidget, QTableWidgetItem, 
     QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog,
-    QFrame, QScrollArea, QSizePolicy, QAbstractItemView
+    QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar
 )
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import Qt, QSize, QDate, QRect
@@ -288,8 +288,8 @@ class TurniView(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(20)
         self.setMinimumWidth(1100)
-        
-        # --- Stile Scrollbar Moderno (Uniforme per le Card) ---
+
+        # Stile Scrollbar Moderno
         self.scrollbar_style = """
             QScrollArea { border: none; background: transparent; }
             QScrollBar:vertical {
@@ -307,14 +307,8 @@ class TurniView(QWidget):
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
             }
-            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
-                background: none;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
         """
-
+        
         # --- HEADER NAVIGATION ---
         header_layout = QHBoxLayout()
         header_layout.setSpacing(10)
@@ -403,10 +397,10 @@ class TurniView(QWidget):
         dashboard_layout = QHBoxLayout()
         dashboard_layout.setSpacing(20)
 
-        # Card 1: Personale Attivo
+        # Card 1: Copertura Turni (ex Personale Attivo)
         active_card = QFrame()
         active_card.setObjectName("active_card")
-        active_card.setMinimumWidth(250)
+        active_card.setMinimumWidth(300)
         active_card.setStyleSheet("""
             #active_card {
                 background-color: white;
@@ -417,38 +411,87 @@ class TurniView(QWidget):
         active_layout = QVBoxLayout(active_card)
         active_layout.setContentsMargins(20, 20, 20, 20)
         
-        # Contenuto Personale Attivo
+        # Contenuto Copertura
         top_row = QHBoxLayout()
         
         v_labels = QVBoxLayout()
-        lbl_active_title = QLabel("PERSONALE ATTIVO")
+        lbl_active_title = QLabel("COPERTURA TURNI")
         lbl_active_title.setStyleSheet("color: #64748b; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;")
-        self.lbl_active_count = QLabel("0")
-        self.lbl_active_count.setStyleSheet("color: #3b82f6; font-size: 32px; font-weight: 800;")
-        v_labels.addWidget(lbl_active_title)
-        v_labels.addWidget(self.lbl_active_count)
         
-        icon_people = QLabel()
-        pix_p = QPixmap("./interfacciaGrafica/assets/people.svg")
+        self.lbl_coverage_perc = QLabel("0%")
+        self.lbl_coverage_perc.setStyleSheet("color: #3b82f6; font-size: 32px; font-weight: 800;")
+        
+        v_labels.addWidget(lbl_active_title)
+        v_labels.addWidget(self.lbl_coverage_perc)
+        
+        # Icona (Pie chart statica o simile, usiamo una variante colorata)
+        icon_chart = QLabel()
+        pix_p = QPixmap("./interfacciaGrafica/assets/pie-chart.svg") # Fallback o nuova icona
+        # Se non hai pie-chart usa quella esistente o un placeholder, qui riuso una generica
+        if pix_p.isNull():
+             pix_p = QPixmap("./interfacciaGrafica/assets/options.svg") # Placeholder
+
         if not pix_p.isNull():
             painter = QPainter(pix_p)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
             painter.fillRect(pix_p.rect(), QColor("#3b82f6")) # Blu
             painter.end()
-            icon_people.setPixmap(pix_p.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        icon_people.setStyleSheet("background-color: transparent; padding: 0px;")
+            icon_chart.setPixmap(pix_p.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        icon_chart.setStyleSheet("background-color: transparent; padding: 0px;")
         
         top_row.addLayout(v_labels)
         top_row.addStretch()
-        top_row.addWidget(icon_people)
+        top_row.addWidget(icon_chart)
         
         active_layout.addLayout(top_row)
-        active_layout.addStretch() # Spinge in alto il contenuto
+        
+        # Sottotitolo per dettagli (es. 45/50 turni)
+        self.lbl_coverage_detail = QLabel("Calcolo in corso...")
+        self.lbl_coverage_detail.setStyleSheet("color: #64748b; font-size: 13px; font-weight: 500; margin-top: 5px;")
+        active_layout.addWidget(self.lbl_coverage_detail)
+        
+        # --- Breakdown Copertura per Fascia ---
+        active_layout.addSpacing(20)
+        self.coverage_bars = {} # Dizionario per aggiornare le barre: {TipoFascia: (ProgressBar, Label)}
+        
+        fasce_colors = {
+            TipoFascia.MATTINA: "#f59e0b",   # Amber (Sole)
+            TipoFascia.POMERIGGIO: "#ea580c", # Orange (Tramonto)
+            TipoFascia.NOTTE: "#4f46e5"      # Indigo (Luna)
+        }
+        
+        for tipo in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE]:
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            
+            lbl_fascia = QLabel(tipo.value.capitalize())
+            lbl_fascia.setFixedWidth(75)
+            lbl_fascia.setStyleSheet("color: #64748b; font-size: 12px; font-weight: 600;")
+            
+            pbar = QProgressBar()
+            pbar.setFixedHeight(8)
+            pbar.setTextVisible(False)
+            color = fasce_colors.get(tipo, "#cbd5e1")
+            pbar.setStyleSheet(f"QProgressBar {{ border: none; background-color: #f1f5f9; border-radius: 4px; }} QProgressBar::chunk {{ background-color: {color}; border-radius: 4px; }}")
+            
+            val_lbl = QLabel("0/0")
+            val_lbl.setStyleSheet("color: #334155; font-size: 11px; font-weight: bold;")
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+            val_lbl.setFixedWidth(40)
+            
+            row.addWidget(lbl_fascia)
+            row.addWidget(pbar)
+            row.addWidget(val_lbl)
+            
+            active_layout.addLayout(row)
+            self.coverage_bars[tipo] = (pbar, val_lbl)
+        
+        active_layout.addStretch() 
         
         # Card 2: Assenze Correnti
         abs_card = QFrame()
         abs_card.setObjectName("abs_card")
-        abs_card.setMinimumWidth(350)
+        abs_card.setMinimumWidth(300)
         abs_card.setStyleSheet("""
             #abs_card {
                 background-color: white;
@@ -467,6 +510,7 @@ class TurniView(QWidget):
         abs_header = QHBoxLayout()
         abs_header.setContentsMargins(0, 5, 0, 5)
         abs_header.addWidget(QLabel("DIPENDENTE"), stretch=2)
+        # Allineamento centrale per il titolo TIPO per matchare le pillole
         abs_header.addWidget(QLabel("TIPO"), stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
         abs_header.addWidget(QLabel("PERIODO"), stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
         # Applichiamo uno stile leggero per gli header
@@ -617,12 +661,53 @@ class TurniView(QWidget):
              self.btn_today.setEnabled(True)
 
     def update_dashboard_data(self):
-        # 1. Personale Attivo (Statica, o filtrata per quelli attivi in data lunedì)
-        dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
-        active_count = sum(1 for d in dipendenti if d.stato.name == "ASSUNTO")
-        self.lbl_active_count.setText(str(active_count))
+        # 1. Copertura Turni (Calcolata sui limiti configurati)
+        # Recupera i limiti dal sistema
+        limiti = self.interfaccia.turnazione.limiti_fascia # dict[TipoFascia, int]
+        
+        # Calcola target per fascia
+        targets = {
+            TipoFascia.MATTINA: limiti.get(TipoFascia.MATTINA, 0) * 7,
+            TipoFascia.POMERIGGIO: limiti.get(TipoFascia.POMERIGGIO, 0) * 7,
+            TipoFascia.NOTTE: limiti.get(TipoFascia.NOTTE, 0) * 7
+        }
+        
+        actuals = {
+            TipoFascia.MATTINA: 0,
+            TipoFascia.POMERIGGIO: 0,
+            TipoFascia.NOTTE: 0
+        }
+        
+        # Conta i turni effettivamente assegnati nella settimana corrente
+        anno, settimana, _ = self.current_monday.isocalendar()
+        settimana_dict = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana))
+        
+        if settimana_dict:
+            for day_fasce in settimana_dict.values():
+                for tipo, fascia in day_fasce.items():
+                    if tipo in actuals:
+                        actuals[tipo] += len(fascia.assegnazioni)
+        
+        # Totali generali
+        total_target = sum(targets.values())
+        total_actual = sum(actuals.values())
+        
+        perc = (total_actual / total_target * 100) if total_target > 0 else 0
+        self.lbl_coverage_perc.setText(f"{int(perc)}%")
+        self.lbl_coverage_detail.setText(f"{total_actual} / {total_target} Turni assegnati")
+        
+        # Aggiorna le barre di dettaglio
+        for tipo, (pbar, lbl) in self.coverage_bars.items():
+            tgt = targets.get(tipo, 0)
+            act = actuals.get(tipo, 0)
+            
+            # Evita divisione per zero nel massimo della progress bar
+            pbar.setMaximum(tgt if tgt > 0 else 1)
+            pbar.setValue(act)
+            lbl.setText(f"{act}/{tgt}")
 
         # Aggiorna le due liste dinamiche
+        dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
         self.update_current_absences(dipendenti)
         self.update_weekly_summary(dipendenti)
 
@@ -691,6 +776,7 @@ class TurniView(QWidget):
         lbl_dates.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
         h_layout.addWidget(lbl_name, stretch=2) # Stretch per allineare con header
+        # Allineamento centrale per la pillola
         h_layout.addWidget(pill, stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
         # h_layout.addStretch() # Rimosso per usare stretch factor
         h_layout.addWidget(lbl_dates, stretch=1)
@@ -744,7 +830,7 @@ class TurniView(QWidget):
     def create_summary_card(self):
         card = QFrame()
         card.setObjectName("summary_card")
-        card.setMinimumWidth(350)
+        card.setMinimumWidth(300)
         card.setStyleSheet("#summary_card { background-color: white; border: 1px solid #e2e8f0; border-radius: 12px; }")
         
         layout = QVBoxLayout(card)
@@ -784,7 +870,7 @@ class TurniView(QWidget):
         # Header Colonne Riepilogo
         summary_header = QHBoxLayout()
         summary_header.setContentsMargins(0, 10, 0, 5)
-        summary_header.addWidget(QLabel("DIPENDENTE"))
+        summary_header.addWidget(QLabel("DIPENDENTE"), stretch=2)
         summary_header.addWidget(QLabel("ORE LAVORATE"), stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
         summary_header.addWidget(QLabel("STATO"), stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
         for i in range(summary_header.count()): 
@@ -822,25 +908,26 @@ class TurniView(QWidget):
         lbl_name.setStyleSheet("color: #334155;")
         layout.addWidget(lbl_name)
         
-        # Mostra Ore lavorate / Ore target
+        # Calcolo visualizzazione parziale (Ore / Max) e differenza
         max_ore = self.interfaccia.turnazione.MAX_ORE
-        lbl_ore = QLabel(f"{ore:.2f} / {max_ore}h")
+        diff = ore - max_ore
+        text_ore = f"{ore:.2f} / {max_ore}h"
+        if diff < 0:
+            text_ore += f" ({diff:.2f})"
+        elif diff > 0:
+            text_ore += f" (+{diff:.2f})"
+            
+        lbl_ore = QLabel(text_ore)
         lbl_ore.setStyleSheet("color: #334155;")
-        layout.addWidget(lbl_ore, stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
         
         pill = QLabel()
         pill.setFixedWidth(120) # Larghezza fissa per allineamento
         pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         if not is_approved:
-            # Se non approvato, mostra stima provvisoria in grigio/blu
-            if delta > 0:
-                pill.setText(f"Stima: +{delta:.2f}h")
-            elif delta < 0:
-                pill.setText(f"Stima: -{abs(delta):.2f}h")
-            else:
-                pill.setText("Stima: In pari")
-            pill.setStyleSheet("background-color: #f8fafc; color: #64748b; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
+            # Se non approvato, mostra stato provvisorio
+            pill.setText("In Corso")
+            pill.setStyleSheet("background-color: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
         else:
             # Se approvato, mostra il calcolo banca ore effettivo
             if delta > 0:
@@ -855,6 +942,8 @@ class TurniView(QWidget):
                 pill.setText("In Regola")
                 pill.setStyleSheet("background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
         
+        layout.addWidget(lbl_name, stretch=2)
+        layout.addWidget(lbl_ore, stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(pill, stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
         return item
 
