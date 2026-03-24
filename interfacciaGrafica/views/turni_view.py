@@ -289,6 +289,32 @@ class TurniView(QWidget):
         layout.setSpacing(20)
         self.setMinimumWidth(1100)
         
+        # --- Stile Scrollbar Moderno (Uniforme per le Card) ---
+        self.scrollbar_style = """
+            QScrollArea { border: none; background: transparent; }
+            QScrollBar:vertical {
+                border: none;
+                background: #f1f5f9;
+                width: 8px;
+                border-radius: 4px;
+                margin: 0px 0px 0px 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                min-height: 20px;
+                border-radius: 4px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
+                background: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+        """
+
         # --- HEADER NAVIGATION ---
         header_layout = QHBoxLayout()
         header_layout.setSpacing(10)
@@ -380,6 +406,7 @@ class TurniView(QWidget):
         # Card 1: Personale Attivo
         active_card = QFrame()
         active_card.setObjectName("active_card")
+        active_card.setMinimumWidth(250)
         active_card.setStyleSheet("""
             #active_card {
                 background-color: white;
@@ -418,11 +445,10 @@ class TurniView(QWidget):
         active_layout.addLayout(top_row)
         active_layout.addStretch() # Spinge in alto il contenuto
         
-        dashboard_layout.addWidget(active_card)
-
         # Card 2: Assenze Correnti
         abs_card = QFrame()
         abs_card.setObjectName("abs_card")
+        abs_card.setMinimumWidth(350)
         abs_card.setStyleSheet("""
             #abs_card {
                 background-color: white;
@@ -441,7 +467,7 @@ class TurniView(QWidget):
         abs_header = QHBoxLayout()
         abs_header.setContentsMargins(0, 5, 0, 5)
         abs_header.addWidget(QLabel("DIPENDENTE"), stretch=2)
-        abs_header.addWidget(QLabel("TIPO"), stretch=1)
+        abs_header.addWidget(QLabel("TIPO"), stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
         abs_header.addWidget(QLabel("PERIODO"), stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
         # Applichiamo uno stile leggero per gli header
         for i in range(abs_header.count()): abs_header.itemAt(i).widget().setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: bold;")
@@ -451,11 +477,12 @@ class TurniView(QWidget):
         scroll_abs = QScrollArea()
         scroll_abs.setWidgetResizable(True)
         scroll_abs.setFixedHeight(120)
-        scroll_abs.setStyleSheet("border: none; background: transparent;")
+        scroll_abs.setStyleSheet(self.scrollbar_style)
         
         abs_content = QWidget()
+        abs_content.setStyleSheet("background-color: transparent;")
         self.abs_layout = QVBoxLayout(abs_content)
-        self.abs_layout.setContentsMargins(0, 5, 0, 0)
+        self.abs_layout.setContentsMargins(0, 5, 5, 0)
         self.abs_layout.setSpacing(8)
         self.abs_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
@@ -464,7 +491,7 @@ class TurniView(QWidget):
         
         # Card 3: Riepilogo Settimanale
         self.summary_card = self.create_summary_card()
-        dashboard_layout.addWidget(active_card)
+        dashboard_layout.addWidget(active_card, stretch=1)
         dashboard_layout.addWidget(abs_card, stretch=1)
         dashboard_layout.addWidget(self.summary_card, stretch=1)
         
@@ -635,6 +662,7 @@ class TurniView(QWidget):
 
     def create_absence_item(self, dip, ass, start, end):
         item = QWidget()
+        item.setStyleSheet("background-color: transparent;")
         h_layout = QHBoxLayout(item)
         h_layout.setContentsMargins(0, 0, 0, 0)
         h_layout.setSpacing(10)
@@ -663,7 +691,7 @@ class TurniView(QWidget):
         lbl_dates.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
         h_layout.addWidget(lbl_name, stretch=2) # Stretch per allineare con header
-        h_layout.addWidget(pill, stretch=1)
+        h_layout.addWidget(pill, stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
         # h_layout.addStretch() # Rimosso per usare stretch factor
         h_layout.addWidget(lbl_dates, stretch=1)
         
@@ -716,6 +744,7 @@ class TurniView(QWidget):
     def create_summary_card(self):
         card = QFrame()
         card.setObjectName("summary_card")
+        card.setMinimumWidth(350)
         card.setStyleSheet("#summary_card { background-color: white; border: 1px solid #e2e8f0; border-radius: 12px; }")
         
         layout = QVBoxLayout(card)
@@ -756,9 +785,8 @@ class TurniView(QWidget):
         summary_header = QHBoxLayout()
         summary_header.setContentsMargins(0, 10, 0, 5)
         summary_header.addWidget(QLabel("DIPENDENTE"))
-        summary_header.addStretch()
-        summary_header.addWidget(QLabel("ORE TOT."))
-        summary_header.addWidget(QLabel("STATO"), alignment=Qt.AlignmentFlag.AlignRight)
+        summary_header.addWidget(QLabel("ORE LAVORATE"), stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
+        summary_header.addWidget(QLabel("STATO"), stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
         for i in range(summary_header.count()): 
             w = summary_header.itemAt(i).widget()
             if w:
@@ -768,11 +796,13 @@ class TurniView(QWidget):
         # Scroll Area per la lista
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("border: none; background: transparent;")
+        scroll.setFixedHeight(120)
+        scroll.setStyleSheet(self.scrollbar_style)
         
         content = QWidget()
+        content.setStyleSheet("background-color: transparent;")
         self.summary_layout = QVBoxLayout(content)
-        self.summary_layout.setContentsMargins(0, 5, 0, 0)
+        self.summary_layout.setContentsMargins(0, 5, 5, 0)
         self.summary_layout.setSpacing(8)
         self.summary_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
@@ -783,6 +813,7 @@ class TurniView(QWidget):
 
     def create_summary_item(self, dip, ore, delta, is_approved):
         item = QWidget()
+        item.setStyleSheet("background-color: transparent;")
         layout = QHBoxLayout(item)
         layout.setContentsMargins(0,0,0,0)
         layout.setSpacing(10)
@@ -791,20 +822,25 @@ class TurniView(QWidget):
         lbl_name.setStyleSheet("color: #334155;")
         layout.addWidget(lbl_name)
         
-        layout.addStretch()
-        
-        lbl_ore = QLabel(f"{ore:.2f}h")
+        # Mostra Ore lavorate / Ore target
+        max_ore = self.interfaccia.turnazione.MAX_ORE
+        lbl_ore = QLabel(f"{ore:.2f} / {max_ore}h")
         lbl_ore.setStyleSheet("color: #334155;")
-        layout.addWidget(lbl_ore)
+        layout.addWidget(lbl_ore, stretch=1, alignment=Qt.AlignmentFlag.AlignCenter)
         
         pill = QLabel()
         pill.setFixedWidth(120) # Larghezza fissa per allineamento
         pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         if not is_approved:
-            # Se non approvato, mostra stato provvisorio
-            pill.setText("In Corso")
-            pill.setStyleSheet("background-color: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
+            # Se non approvato, mostra stima provvisoria in grigio/blu
+            if delta > 0:
+                pill.setText(f"Stima: +{delta:.2f}h")
+            elif delta < 0:
+                pill.setText(f"Stima: -{abs(delta):.2f}h")
+            else:
+                pill.setText("Stima: In pari")
+            pill.setStyleSheet("background-color: #f8fafc; color: #64748b; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
         else:
             # Se approvato, mostra il calcolo banca ore effettivo
             if delta > 0:
@@ -819,7 +855,7 @@ class TurniView(QWidget):
                 pill.setText("In Regola")
                 pill.setStyleSheet("background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 8px;")
         
-        layout.addWidget(pill)
+        layout.addWidget(pill, stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
         return item
 
     def create_day_widget(self, dt: date):
