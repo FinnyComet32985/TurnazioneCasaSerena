@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedWidget,
     QMessageBox, QDialog, QLineEdit, QFormLayout, QComboBox, 
-    QProgressBar, QScrollArea, QGridLayout
+    QProgressBar, QScrollArea, QGridLayout, QDoubleSpinBox
 )
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor
 from PyQt6.QtCore import Qt, QSize
@@ -44,6 +44,40 @@ class AddAssenzaDialog(QDialog):
             return tipo, dt_inizio, dt_fine
         except ValueError:
             return None, None, None
+
+class EditSaldiDialog(QDialog):
+    def __init__(self, ferie_attuali, rol_attuali, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Modifica Saldi Ferie/ROL")
+        self.setFixedWidth(300)
+        
+        layout = QFormLayout(self)
+        
+        self.spin_ferie = QDoubleSpinBox()
+        self.spin_ferie.setRange(-100, 365)
+        self.spin_ferie.setValue(ferie_attuali)
+        self.spin_ferie.setSuffix(" gg")
+        
+        self.spin_rol = QDoubleSpinBox()
+        self.spin_rol.setRange(-1000, 1000)
+        self.spin_rol.setValue(rol_attuali)
+        self.spin_rol.setSuffix(" ore")
+        
+        layout.addRow("Ferie Residue:", self.spin_ferie)
+        layout.addRow("ROL Residui:", self.spin_rol)
+        
+        btn_layout = QHBoxLayout()
+        btn_salva = QPushButton("Salva")
+        btn_annulla = QPushButton("Annulla")
+        btn_salva.clicked.connect(self.accept)
+        btn_annulla.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_salva)
+        btn_layout.addWidget(btn_annulla)
+        
+        layout.addRow(btn_layout)
+    
+    def get_data(self):
+        return self.spin_ferie.value(), self.spin_rol.value()
 
 class AssenzeView(QWidget):
     def __init__(self, interfaccia):
@@ -196,7 +230,7 @@ class AssenzeView(QWidget):
 
         # Titolo Generale + Bottone Modifica
         header_layout = QHBoxLayout()
-        title_lbl = QLabel("Resoconto")
+        title_lbl = QLabel("Resoconto Mensile")
         title_lbl.setStyleSheet("font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 5px;")
         
         # Preparo l'icona ricolorandola di blu
@@ -377,19 +411,48 @@ class AssenzeView(QWidget):
 
 
         # --- Aggiorna Riepilogo ---
-        # Valori massimi basati su CCNL (26gg ferie, 32h ROL)
-        FERIE_ANNUE = 26
-        ROL_ANNUI = 32
-
-        perc_ferie = (dip.ferie_rimanenti / FERIE_ANNUE) * 100 if FERIE_ANNUE > 0 else 0
-        self.progress_ferie.setValue(int(perc_ferie))
-        self.lbl_ferie.setText(f"{dip.ferie_rimanenti:.2f} / {FERIE_ANNUE} giorni")
-
-        perc_rol = (dip.rol_rimanenti / ROL_ANNUI) * 100 if ROL_ANNUI > 0 else 0
-        self.progress_rol.setValue(int(perc_rol))
-        self.lbl_rol.setText(f"{dip.rol_rimanenti:.2f} / {ROL_ANNUI} ore")
-
+        # Calcolo i totali basandomi sul saldo inizio mese (Attuale + Consumato nel mese)
+        now = datetime.now()
+        mese_corrente_inizio = datetime(now.year, now.month, 1)
+        if now.month == 12:
+            mese_succ_inizio = datetime(now.year + 1, 1, 1)
+        else:
+            mese_succ_inizio = datetime(now.year, now.month + 1, 1)
+            
+        ferie_consumate = 0.0
+        rol_consumati = 0.0
+        
         assenze = self.interfaccia.sistema_dipendenti.get_assenze_dipendente(id_dipendente)
+        fmt = "%Y-%m-%d %H:%M:%S"
+        
+        for ass in assenze:
+            try:
+                dt_inizio = datetime.strptime(ass.data_inizio, fmt)
+                dt_fine = datetime.strptime(ass.data_fine, fmt)
+                # Intersezione con il mese corrente
+                start = max(dt_inizio, mese_corrente_inizio)
+                end = min(dt_fine, mese_succ_inizio)
+                
+                if start < end:
+                    delta = end - start
+                    if ass.tipo == TipoAssenza.FERIE.value:
+                        ferie_consumate += delta.total_seconds() / 86400
+                    elif ass.tipo == TipoAssenza.ROL.value:
+                        rol_consumati += delta.total_seconds() / 3600
+            except ValueError:
+                continue
+
+        ferie_inizio_mese = dip.ferie_rimanenti + ferie_consumate
+        rol_inizio_mese = dip.rol_rimanenti + rol_consumati
+
+        perc_ferie = (dip.ferie_rimanenti / ferie_inizio_mese) * 100 if ferie_inizio_mese > 0 else 0
+        self.progress_ferie.setValue(int(perc_ferie))
+        self.lbl_ferie.setText(f"{dip.ferie_rimanenti:.2f} / {ferie_inizio_mese:.2f} giorni")
+
+        perc_rol = (dip.rol_rimanenti / rol_inizio_mese) * 100 if rol_inizio_mese > 0 else 0
+        self.progress_rol.setValue(int(perc_rol))
+        self.lbl_rol.setText(f"{dip.rol_rimanenti:.2f} / {rol_inizio_mese:.2f} ore")
+
         num_certificati = sum(1 for a in assenze if a.tipo == TipoAssenza.CERTIFICATO.value)
         self.lbl_certificati.setText(str(num_certificati))
 
@@ -588,4 +651,25 @@ class AssenzeView(QWidget):
                 QMessageBox.warning(self, "Dati non validi", "Il formato della data non è corretto.")
 
     def cmd_modifica_resoconto(self):
-        QMessageBox.information(self, "In Sviluppo", "La modifica manuale dei saldi sarà disponibile a breve.")
+        if not self.current_dip_id: return
+        
+        dip = self.interfaccia.sistema_dipendenti.get_dipendente(self.current_dip_id)
+        if not dip: return
+
+        dialog = EditSaldiDialog(dip.ferie_rimanenti, dip.rol_rimanenti, self)
+        if dialog.exec():
+            new_ferie, new_rol = dialog.get_data()
+            
+            # Riutilizziamo la funzione generica di modifica passando i nuovi saldi
+            success = self.interfaccia.sistema_dipendenti.modifica_dipendente(
+                id_dipendente=dip.id_dipendente,
+                nome=dip.nome,
+                cognome=dip.cognome,
+                ferie=new_ferie,
+                rol=new_rol,
+                banca_ore=dip.banca_ore
+            )
+            if success:
+                self.load_data(self.current_dip_id)
+            else:
+                QMessageBox.critical(self, "Errore", "Impossibile aggiornare i saldi.")

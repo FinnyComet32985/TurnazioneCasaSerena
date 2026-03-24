@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QStackedWidget, QMessageBox
+    QStackedWidget, QMessageBox, QDialog, QLineEdit, QFormLayout
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QSize
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor, QPen, QPainterPath
@@ -8,6 +8,33 @@ from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor, QPen, QPainterPath
 # Import della nuova vista per le assenze
 from .assenze_view import AssenzeView
 from .banca_ore_view import BancaOreView
+
+class EditAnagraficaDialog(QDialog):
+    def __init__(self, nome_attuale, cognome_attuale, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Modifica Dati Anagrafici")
+        self.setFixedWidth(300)
+        
+        layout = QFormLayout(self)
+        
+        self.input_nome = QLineEdit(nome_attuale)
+        self.input_cognome = QLineEdit(cognome_attuale)
+        
+        layout.addRow("Nome:", self.input_nome)
+        layout.addRow("Cognome:", self.input_cognome)
+        
+        btn_layout = QHBoxLayout()
+        btn_salva = QPushButton("Salva")
+        btn_annulla = QPushButton("Annulla")
+        btn_salva.clicked.connect(self.accept)
+        btn_annulla.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_salva)
+        btn_layout.addWidget(btn_annulla)
+        
+        layout.addRow(btn_layout)
+    
+    def get_data(self):
+        return self.input_nome.text().strip(), self.input_cognome.text().strip()
 
 class BadgeWidget(QWidget):
     def __init__(self, parent=None):
@@ -374,7 +401,28 @@ class DettaglioDipendenteView(QWidget):
         self.switch_tab(0)
         
     def cmd_modifica(self):
-        QMessageBox.information(self, "In Sviluppo", "La modifica dei dati anagrafici sarà disponibile a breve.")
+        if not self.current_dip_id: return
+        
+        dip = self.interfaccia.sistema_dipendenti.get_dipendente(self.current_dip_id)
+        if not dip: return
+
+        dialog = EditAnagraficaDialog(dip.nome, dip.cognome, self)
+        if dialog.exec():
+            new_nome, new_cognome = dialog.get_data()
+            if new_nome and new_cognome:
+                # Manteniamo i valori attuali per i campi che non stiamo modificando qui
+                success = self.interfaccia.sistema_dipendenti.modifica_dipendente(
+                    id_dipendente=dip.id_dipendente,
+                    nome=new_nome,
+                    cognome=new_cognome,
+                    ferie=dip.ferie_rimanenti,
+                    rol=dip.rol_rimanenti,
+                    banca_ore=dip.banca_ore
+                )
+                if success:
+                    self.load_dipendente(self.current_dip_id)
+                else:
+                    QMessageBox.critical(self, "Errore", "Impossibile modificare i dati.")
 
     def cmd_riassumi(self):
         if not self.current_dip_id: return

@@ -1,10 +1,43 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QMessageBox,
-    QGridLayout
+    QGridLayout, QDialog, QDoubleSpinBox, QFormLayout
 )
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor
 from PyQt6.QtCore import Qt, QSize
 import random # Per simulare i dati storici
+
+class RegolaBancaOreDialog(QDialog):
+    def __init__(self, saldo_attuale, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Regola Banca Ore")
+        self.setFixedWidth(300)
+        
+        layout = QFormLayout(self)
+        
+        self.lbl_info = QLabel("Modifica il valore totale per correggere il saldo.")
+        self.lbl_info.setWordWrap(True)
+        layout.addRow(self.lbl_info)
+        
+        self.spin_ore = QDoubleSpinBox()
+        self.spin_ore.setRange(-1000, 1000)
+        self.spin_ore.setDecimals(2)
+        self.spin_ore.setSuffix(" ore")
+        self.spin_ore.setValue(saldo_attuale)
+        
+        layout.addRow("Nuovo Saldo:", self.spin_ore)
+        
+        btn_layout = QHBoxLayout()
+        btn_salva = QPushButton("Applica")
+        btn_annulla = QPushButton("Annulla")
+        btn_salva.clicked.connect(self.accept)
+        btn_annulla.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_salva)
+        btn_layout.addWidget(btn_annulla)
+        
+        layout.addRow(btn_layout)
+    
+    def get_data(self):
+        return self.spin_ore.value()
 
 class BancaOreView(QWidget):
     def __init__(self, interfaccia):
@@ -344,4 +377,22 @@ class BancaOreView(QWidget):
                 self.lista_movimenti_layout.addWidget(card)
 
     def cmd_regola_saldo(self):
-        QMessageBox.information(self, "Regola Saldo", "Funzionalità di rettifica manuale in sviluppo.")
+        if not self.current_dip_id: return
+        
+        # Recuperiamo il dipendente per conoscere il saldo di partenza
+        dip = self.interfaccia.sistema_dipendenti.get_dipendente(self.current_dip_id)
+        if not dip: return
+
+        dialog = RegolaBancaOreDialog(dip.banca_ore, self)
+        if dialog.exec():
+            nuovo_saldo = dialog.get_data()
+            # Calcoliamo il delta (Nuovo - Vecchio) per il backend
+            delta_ore = nuovo_saldo - dip.banca_ore
+            
+            if delta_ore != 0:
+                # Usa la funzione backend esistente per aggiornare tramite delta
+                success = self.interfaccia.sistema_dipendenti.aggiorna_banca_ore(self.current_dip_id, delta_ore)
+                if success:
+                    self.load_data(self.current_dip_id)
+                else:
+                    QMessageBox.critical(self, "Errore", "Impossibile aggiornare la banca ore.")
