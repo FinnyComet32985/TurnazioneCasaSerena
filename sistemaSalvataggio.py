@@ -249,21 +249,38 @@ def reset_settimana(data_inizio: str, data_fine: str) -> bool:
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
     
-    # Cancelliamo le assegnazioni (lavora) per i turni nel range specificato
+    # Cancelliamo le assegnazioni (lavora) per i turni nel range specificato,
+    # TRANNE quelle di tipo RIPOSO che derivano da una NOTTE fatta prima dell'inizio del range.
     query_del = """
         DELETE FROM lavora 
         WHERE idTurno IN (
             SELECT idTurno FROM turno 
             WHERE dataTurno >= ? AND dataTurno <= ?
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM turno t_curr
+            WHERE t_curr.idTurno = lavora.idTurno
+            AND t_curr.fasciaOraria = 'RIPOSO'
+            AND EXISTS (
+                SELECT 1 FROM turno t_prev
+                JOIN lavora l_prev ON t_prev.idTurno = l_prev.idTurno
+                WHERE l_prev.idDipendente = lavora.idDipendente
+                AND t_prev.fasciaOraria = 'NOTTE'
+                AND t_prev.dataTurno < ?
+                AND (
+                    date(t_curr.dataTurno, '-1 day') = t_prev.dataTurno OR 
+                    date(t_curr.dataTurno, '-2 day') = t_prev.dataTurno
+                )
+            )
+        )
     """
     
-    # Riportiamo lo stato dei turni a 'GENERATA' (pronti per essere riempiti)
-    query_upd = "UPDATE turno SET stato = 'GENERATA' WHERE dataTurno >= ? AND dataTurno <= ?"
+    # Riportiamo lo stato dei turni a 'GENERATO' (pronti per essere riempiti)
+    query_upd = "UPDATE turno SET stato = 'GENERATO' WHERE dataTurno >= ? AND dataTurno <= ?"
 
     success = False
     try:
-        cursor.execute(query_del, (data_inizio, data_fine))
+        cursor.execute(query_del, (data_inizio, data_fine, data_inizio))
         cursor.execute(query_upd, (data_inizio, data_fine))
         connection.commit()
         success = True

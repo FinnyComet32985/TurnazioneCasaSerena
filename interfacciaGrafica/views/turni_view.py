@@ -72,7 +72,7 @@ class AssignTurnoDialog(QDialog):
         self.check_corto = QCheckBox("Turno Corto")
         self.check_corto.setStyleSheet("font-weight: 500;")
         # Abilita "Corto" solo se è mattina
-        if tipo_fascia != TipoFascia.MATTINA:
+        if tipo_fascia != TipoFascia.MATTINA.value:
             self.check_corto.setEnabled(False)
             self.check_corto.setToolTip("Disponibile solo per il turno di Mattina")
             
@@ -618,19 +618,30 @@ class TurniView(QWidget):
             }
             QPushButton:hover { background-color: #dcfce7; border-color: #6ee7b7; }
         """
+        svuota_style = """
+            QPushButton {
+                background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 6px;
+                padding: 8px 16px; font-weight: bold; color: #991b1b; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #fee2e2; border-color: #fca5a5; }
+        """
         self.btn_modifica = QPushButton("✏️ Modifica")
         self.btn_approva = QPushButton("✅ Approva")
+        self.btn_svuota = QPushButton("🗑️ Svuota")
         self.btn_pdf = QPushButton("📄 Esporta")
         
         self.btn_modifica.setStyleSheet(btn_style_header)
         self.btn_approva.setStyleSheet(approve_style)
+        self.btn_svuota.setStyleSheet(svuota_style)
         self.btn_pdf.setStyleSheet(btn_style_header)
 
         self.btn_approva.clicked.connect(self.approva_settimana_ui)
         self.btn_modifica.clicked.connect(self.riapri_settimana_ui)
+        self.btn_svuota.clicked.connect(self.svuota_settimana_ui)
 
         action_btn_layout.addWidget(self.btn_modifica)
         action_btn_layout.addWidget(self.btn_approva)
+        action_btn_layout.addWidget(self.btn_svuota)
         action_btn_layout.addWidget(self.btn_pdf)
         header_layout.addLayout(action_btn_layout)
 
@@ -947,11 +958,13 @@ class TurniView(QWidget):
         
         if is_approved:
             self.btn_approva.hide()
+            self.btn_svuota.hide()
             self.btn_modifica.show()
             self.btn_modifica.setText("🔓 Riapri Settimana")
             self.btn_modifica.setStyleSheet("background-color: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 16px; font-weight: bold; border-radius: 6px;")
         else:
             self.btn_approva.show()
+            self.btn_svuota.show()
             self.btn_modifica.hide()
             self.btn_modifica.setText("✏️ Modifica")
 
@@ -1444,3 +1457,16 @@ class TurniView(QWidget):
                 self.aggiorna_tabella()
             else:
                 QMessageBox.warning(self, "Errore", "Impossibile riaprire la settimana.")
+
+    def svuota_settimana_ui(self):
+        reply = QMessageBox.question(self, "Svuota Settimana", 
+                                   "Sei sicuro di voler cancellare TUTTE le assegnazioni della settimana corrente?\n\nI dati non salvati andranno persi e i turni torneranno allo stato iniziale.",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            anno, settimana, _ = self.current_monday.isocalendar()
+            if self.interfaccia.turnazione.svuota_settimana(anno, settimana):
+                QMessageBox.information(self, "Svuotata", "Tutte le assegnazioni della settimana sono state rimosse.")
+                self.aggiorna_tabella()
+            else:
+                QMessageBox.warning(self, "Errore", "Impossibile svuotare la settimana. Verifica che non sia già approvata.")

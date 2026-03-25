@@ -559,9 +559,10 @@ class Turnazione:
             if jolly_count >= self.max_jolly_per_turno:
                 raise ValueError(f"Limite massimo di {self.max_jolly_per_turno} Jolly raggiunto per questo turno.")
 
-        if piano is not None and not jolly:
-            # Recupera il limite specifico per il piano (default 3 se non specificato)
-            max_p = self.limiti_piano.get(piano, 3)
+        if piano and stato != StatoFascia.GENERATA and not jolly:
+            # Recupera il limite specifico per il piano (usa il default caricato se non specificato in limiti_piano)
+            max_p = self.limiti_piano.get(piano, self.max_dipendenti_per_piano)
+            
             # Conta quanti dipendenti sono su quel piano escludendo i Jolly
             piano_count = sum(1 for a in fascia.assegnazioni if getattr(a, 'piano', None) == piano and not getattr(a, 'jolly', False))
             
@@ -668,24 +669,41 @@ class Turnazione:
                 if fascia.stato == StatoFascia.APPROVATA:
                     print("Impossibile svuotare: La settimana è APPROVATA. Esegui 'Riapri Settimana' prima.")
                     return False
-        
+
+        # 1. Identifichiamo i riposi "protetti" (derivati da notti della settimana precedente)
+        # Questi non devono essere rimossi dalla memoria.
+        protetti = set()  # Insieme di tuple (id_dipendente, data_turno)
         primo_giorno = date.fromisocalendar(anno, settimana, 1)
+        
+        # Controlliamo il Sabato e la Domenica della settimana precedente
+        for i in [1, 2]:
+            data_prec = primo_giorno - timedelta(days=i)
+            a_p, s_p, _ = data_prec.isocalendar()
+            fascia_notte_prec = self.turnazioneSettimanale.get((a_p, s_p), {}).get(data_prec, {}).get(TipoFascia.NOTTE)
+            
+            if fascia_notte_prec:
+                for ass in fascia_notte_prec.assegnazioni:
+                    # Proteggiamo i due giorni successivi alla notte
+                    protetti.add((ass.dipendente.id_dipendente, data_prec + timedelta(days=1)))
+                    protetti.add((ass.dipendente.id_dipendente, data_prec + timedelta(days=2)))
+        
         ultimo_giorno = primo_giorno + timedelta(days=6)
         
         if sistemaSalvataggio.reset_settimana(primo_giorno.strftime("%Y-%m-%d"), ultimo_giorno.strftime("%Y-%m-%d")):
             print(f"Settimana {settimana_key} svuotata con successo.")
             
             # Aggiornamento Memoria: Logica di pulizia profonda
-            for giorno_dict in settimana_dict.values():
-                # Rimuovi completamente le fasce RIPOSO dalla memoria (verranno ricreate se necessario)
-                fasce_da_rimuovere = [tf for tf, f in giorno_dict.items() if f.tipo == TipoFascia.RIPOSO]
-                for tf in fasce_da_rimuovere:
-                    del giorno_dict[tf]
-                
-                # Per le altre fasce (MATTINA, POMERIGGIO, NOTTE), svuota solo le assegnazioni e resetta lo stato
-                for fascia in giorno_dict.values():
-                    fascia.assegnazioni.clear()
-                    fascia.stato = StatoFascia.GENERATA
+            for dt, giorno_dict in settimana_dict.items():
+                for tf, fascia in list(giorno_dict.items()):
+                    # Filtriamo le assegnazioni mantenendo solo quelle protette
+                    fascia.assegnazioni = [a for a in fascia.assegnazioni if (a.dipendente.id_dipendente, dt) in protetti]
+                    
+                    # Se è un riposo ed è rimasto vuoto (non protetto), possiamo rimuovere la fascia
+                    if tf == TipoFascia.RIPOSO and not fascia.assegnazioni:
+                        del giorno_dict[tf]
+                    else:
+                        # Per le fasce lavorative (o riposi protetti), resettiamo lo stato
+                        fascia.stato = StatoFascia.GENERATA
             return True
         else:
             print("Errore durante lo svuotamento della settimana.")
