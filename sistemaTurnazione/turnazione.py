@@ -691,6 +691,47 @@ class Turnazione:
             print("Errore durante lo svuotamento della settimana.")
             return False
 
+    def riempi_riposi_settimana(self, sistema_dipendenti: SistemaDipendenti, settimana_key: tuple[int, int]):
+        """
+        1. Assicura che ogni giorno della settimana abbia una fascia RIPOSO.
+        2. Assegna RIPOSO a tutti i dipendenti che non hanno un turno o un'assenza.
+        """
+        anno, settimana = settimana_key
+        settimana_dict = self.turnazioneSettimanale.get(settimana_key)
+
+        if not settimana_dict:
+            self.inizializza_settimana(anno, settimana)
+            settimana_dict = self.turnazioneSettimanale.get(settimana_key)
+
+        primo_giorno = date.fromisocalendar(anno, settimana, 1)
+        giorni_settimana = [primo_giorno + timedelta(days=i) for i in range(7)]
+        
+        from sistemaDipendenti.dipendente import StatoDipendente
+        tutti_dipendenti = [d for d in sistema_dipendenti.get_lista_dipendenti() if d.stato == StatoDipendente.ASSUNTO]
+
+        for giorno in giorni_settimana:
+            giorno_dict = settimana_dict.get(giorno)
+            if giorno_dict is None:
+                self.inizializza_giorno(giorno)
+                giorno_dict = settimana_dict.get(giorno)
+            
+            if TipoFascia.RIPOSO not in giorno_dict:
+                from sistemaTurnazione.fasciaOraria import FasciaOraria
+                fascia_riposo = FasciaOraria(giorno, TipoFascia.RIPOSO, 0, 0)
+                giorno_dict[TipoFascia.RIPOSO] = fascia_riposo
+
+            for dip in tutti_dipendenti:
+                assegnazioni_settimana = self.get_assegnazioni_dipendente(settimana_key, dip.id_dipendente)
+                ha_turno_giorno = any(item[0].data_turno == giorno for item in assegnazioni_settimana)
+                
+                if not ha_turno_giorno:
+                    if not sistema_dipendenti.verifica_assenza(dip.id_dipendente, giorno):
+                        try:
+                            # Nota: assegna_turno gestisce anche la creazione del turno su DB se necessario via fascia.add_assegnazione
+                            self.assegna_turno(sistema_dipendenti, dip.id_dipendente, giorno, TipoFascia.RIPOSO, stato=StatoFascia.GENERATA)
+                        except ValueError:
+                            continue
+
     def approva_settimana(self, sistema_dipendenti: SistemaDipendenti, settimana_key: tuple[int, int]) -> bool:
         """
         1. Verifica che la settimana non sia già approvata.
@@ -698,6 +739,9 @@ class Turnazione:
         3. Aggiorna la banca ore dei dipendenti (aggiungendo il saldo).
         4. Imposta lo stato di tutti i turni della settimana su APPROVATA.
         """
+        # Assicuriamo che tutte le fasce RIPOSO esistano e siano riempite
+        self.riempi_riposi_settimana(sistema_dipendenti, settimana_key)
+
         settimana_dict = self.turnazioneSettimanale.get(settimana_key, {})
         if not settimana_dict:
             print("Nessun turno trovato per questa settimana.")

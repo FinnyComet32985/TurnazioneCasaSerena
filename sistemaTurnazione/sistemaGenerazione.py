@@ -160,33 +160,7 @@ class SistemaGenerazione:
 
     def _assegna_riposi_mancanti(self, anno: int, settimana: int):
         """
-        Post-processing: Assegna RIPOSO a tutti i dipendenti che non hanno un turno
-        o un'assenza in un determinato giorno.
+        Post-processing: Delega al metodo centralizzato di riempimento riposi.
         """
         print("--- Assegnazione Riposi Mancanti ---")
-        primo_giorno = date.fromisocalendar(anno, settimana, 1)
-        giorni_settimana = [primo_giorno + timedelta(days=i) for i in range(7)]
-        tutti_dipendenti = [d for d in self.sistema_dipendenti.get_lista_dipendenti() if d.stato == StatoDipendente.ASSUNTO]
-
-        for giorno in giorni_settimana:
-            for dip in tutti_dipendenti:
-                # Controlla se il dipendente ha già un turno assegnato in questo giorno
-                ha_turno_giorno = False
-                # Rileggiamo le assegnazioni ad ogni ciclo per essere sicuri di avere i dati aggiornati
-                # (es. i riposi automatici post-notte)
-                assegnazioni_settimana = self.turnazione.get_assegnazioni_dipendente((anno, settimana), dip.id_dipendente)
-                for item in assegnazioni_settimana:
-                    if item[0].data_turno == giorno:
-                        ha_turno_giorno = True
-                        break
-                
-                if not ha_turno_giorno:
-                    # Se non ha turni, controlliamo che non sia in assenza
-                    if not self.sistema_dipendenti.verifica_assenza(dip.id_dipendente, giorno):
-                        # Se non ha turni e non è in assenza, assegnamo RIPOSO
-                        try:
-                            self.turnazione.add_turno(giorno, TipoFascia.RIPOSO, StatoFascia.GENERATA)
-                            self.turnazione.assegna_turno(self.sistema_dipendenti, dip.id_dipendente, giorno, TipoFascia.RIPOSO, stato=StatoFascia.GENERATA)
-                        except ValueError as e:
-                            # L'assegnazione di un riposo non dovrebbe mai fallire, ma logghiamo l'errore per sicurezza
-                            print(f"  -> WARN: Non è stato possibile assegnare RIPOSO a {dip.nome} il {giorno}: {e}")
+        self.turnazione.riempi_riposi_settimana(self.sistema_dipendenti, (anno, settimana))

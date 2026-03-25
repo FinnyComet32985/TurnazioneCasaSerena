@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout,
     QPushButton, QTableWidget, QTableWidgetItem, 
     QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog, QCheckBox,
-    QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter
+    QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter, QMenu
 )
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import Qt, QSize, QDate, QRect, pyqtSignal
@@ -14,9 +14,10 @@ from sistemaDipendenti.dipendente import StatoDipendente
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 
 class AssignTurnoDialog(QDialog):
-    def __init__(self, dipendenti, dt_turno, tipo_fascia, parent=None):
+    def __init__(self, dipendenti, dt_turno, tipo_fascia, parent=None, assegnazione_esistente=None):
         super().__init__(parent)
-        self.setWindowTitle(f"Assegna Turno - {dt_turno} ({tipo_fascia})")
+        self.assegnazione_esistente = assegnazione_esistente
+        self.setWindowTitle(f"Assegna Turno - {dt_turno} ({tipo_fascia})" if not assegnazione_esistente else f"Modifica Turno - {dt_turno} ({tipo_fascia})")
         self.setFixedWidth(350)
         self.id_scelto = None
         self.piano_scelto = 1
@@ -36,8 +37,8 @@ class AssignTurnoDialog(QDialog):
         # Stile per la combo ricercabile
         self.combo.setStyleSheet("""
             QComboBox { color: #0f172a; background-color: white; border: 1px solid #cbd5e1; padding: 6px; border-radius: 4px; }
-            QComboBox QLineEdit { border: none; background: transparent; }
-            QComboBox QAbstractItemView { background-color: white; selection-background-color: #f1f5f9; selection-color: #0f172a; border: 1px solid #cbd5e1; }
+            QComboBox QLineEdit { color: #0f172a; background: transparent; border: none; }
+            QComboBox QAbstractItemView { color: #0f172a; background-color: white; selection-background-color: #f1f5f9; selection-color: #0f172a; outline: none; }
         """)
         
         # Configura il completatore per cercare all'interno del testo
@@ -71,27 +72,46 @@ class AssignTurnoDialog(QDialog):
         self.check_corto = QCheckBox("Turno Corto")
         self.check_corto.setStyleSheet("font-weight: 500;")
         # Abilita "Corto" solo se è mattina
-        if tipo_fascia != "MATTINA":
+        if tipo_fascia != TipoFascia.MATTINA:
             self.check_corto.setEnabled(False)
             self.check_corto.setToolTip("Disponibile solo per il turno di Mattina")
             
         opts_layout.addWidget(self.check_jolly)
         opts_layout.addWidget(self.check_corto)
+        
+        # Pre-selezione se in modifica
+        if self.assegnazione_esistente:
+            index = self.combo.findData(self.assegnazione_esistente.dipendente.id_dipendente)
+            if index >= 0:
+                self.combo.setCurrentIndex(index)
+                self.combo.setEnabled(False) # Non si cambia il dipendente in modifica
+            
+            p = getattr(self.assegnazione_esistente, 'piano', 1) or 1
+            # Assumiamo che la combo_piano abbia indici 0, 1, 2 per Piano 1, 2, 3
+            self.combo_piano.setCurrentIndex(p - 1 if 1 <= p <= 3 else 0)
+            
+            self.check_jolly.setChecked(getattr(self.assegnazione_esistente, 'jolly', False))
+            self.check_corto.setChecked(getattr(self.assegnazione_esistente, 'turnoBreve', False))
+            
+            self.save_btn_text = "Salva Modifiche"
+        else:
+            self.save_btn_text = "Conferma Assegnazione"
+
         layout.addLayout(opts_layout)
         
         # Pulsanti
         btn_layout = QHBoxLayout()
-        btn_salva = QPushButton("Conferma Assegnazione")
-        btn_salva.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_salva.setStyleSheet("background-color: #2563eb; color: white; border-radius: 6px; padding: 8px; font-weight: bold;")
+        self.save_btn = QPushButton(self.save_btn_text)
+        self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.save_btn.setStyleSheet("background-color: #2563eb; color: white; border-radius: 6px; padding: 8px; font-weight: bold;")
         
         btn_annulla = QPushButton("Annulla")
         btn_annulla.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_annulla.setStyleSheet("background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 8px;")
         
-        btn_salva.clicked.connect(self.accept)
+        self.save_btn.clicked.connect(self.accept)
         btn_annulla.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_salva)
+        btn_layout.addWidget(self.save_btn)
         btn_layout.addWidget(btn_annulla)
         
         layout.addLayout(btn_layout)
@@ -230,8 +250,14 @@ class DayWidget(QWidget):
         super().paintEvent(event) # Lascia che l'evento di base disegni i figli (le label)
 
 class DipendentePill(QFrame):
+    deleteRequested = pyqtSignal(int) # id_dipendente
+    editRequested = pyqtSignal(object) # assegnazione
+
     def __init__(self, assegnazione, parent=None):
         super().__init__(parent)
+        self.assegnazione = assegnazione
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
         self.setFixedHeight(24)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 0, 6, 0)
@@ -264,11 +290,47 @@ class DipendentePill(QFrame):
                 border: 1px solid #cbd5e1;
                 border-radius: 6px;
             }
+            QFrame:hover {
+                border: 1px solid #94a3b8;
+                background-color: #f8fafc;
+            }
         """)
+
+    def show_context_menu(self, pos):
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { 
+                background-color: white; 
+                border: 1px solid #cbd5e1; 
+                border-radius: 6px; 
+                padding: 4px;
+            }
+            QMenu::item { 
+                padding: 6px 24px; 
+                color: #334155; 
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QMenu::item:selected { 
+                background-color: #f1f5f9; 
+                color: #0f172a; 
+            }
+        """)
+        
+        edit_action = menu.addAction("Modifica")
+        delete_action = menu.addAction("Elimina")
+        
+        action = menu.exec(self.mapToGlobal(pos))
+        if action == edit_action:
+            self.editRequested.emit(self.assegnazione)
+        elif action == delete_action:
+            self.deleteRequested.emit(self.assegnazione.dipendente.id_dipendente)
 
 class ShiftCellWidget(QWidget):
     clicked = pyqtSignal(int, int) # Segnale personalizzato per il click
-    
+    pillDeleteRequested = pyqtSignal(int, int, int) # row, col, id_dipendente
+    pillEditRequested = pyqtSignal(int, int, object) # row, col, assegnazione
+
     def __init__(self, row, col, stato, assegnazioni, parent=None):
         super().__init__(parent)
         self.row = row
@@ -308,6 +370,8 @@ class ShiftCellWidget(QWidget):
                 c = i % 3
                 pill = DipendentePill(ass)
                 self.layout.addWidget(pill, r, c)
+                pill.deleteRequested.connect(lambda id_dipendente: self.pillDeleteRequested.emit(self.row, self.col, id_dipendente))
+                pill.editRequested.connect(lambda assegnazione: self.pillEditRequested.emit(self.row, self.col, assegnazione))
                 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -320,7 +384,13 @@ class ShiftCellWidget(QWidget):
         painter.end()
 
     def mousePressEvent(self, event):
-        self.clicked.emit(self.row, self.col)
+        # Emette clicked solo se il click è ESATTAMENTE sul widget e non su un figlio (pillola)
+        # e solo se è il tasto sinistro
+        if event.button() == Qt.MouseButton.LeftButton:
+            child = self.childAt(event.pos())
+            # Se child è None o è una label di testo "+ Aggiungi", allora è un click vuoto
+            if child is None or isinstance(child, QLabel):
+                self.clicked.emit(self.row, self.col)
         super().mousePressEvent(event)
 
 class ShiftHeaderView(QHeaderView):
@@ -1229,7 +1299,47 @@ class TurniView(QWidget):
                 # Utilizziamo il nuovo widget personalizzato
                 cell_widget = ShiftCellWidget(row, table_col, stato, assegnazioni, self.table)
                 cell_widget.clicked.connect(self.on_cell_clicked)
+                cell_widget.pillDeleteRequested.connect(self.rimuovi_dipendente_da_turno)
+                cell_widget.pillEditRequested.connect(self.modifica_assegnazione_turno)
                 self.table.setCellWidget(row, table_col, cell_widget)
+
+    def rimuovi_dipendente_da_turno(self, row, col, id_dipendente):
+        tipo_fascia = self.fasce_disponibili[col - 1]
+        dt_turno = self.date_rows[row]
+        
+        # Conferma eliminazione
+        res = QMessageBox.question(self, "Elimina Turno", "Sei sicuro di voler rimuovere questo dipendente dal turno?")
+        if res == QMessageBox.StandardButton.Yes:
+            if self.interfaccia.turnazione.rimuovi_assegnazione(id_dipendente, dt_turno, tipo_fascia):
+                self.aggiorna_tabella()
+
+    def modifica_assegnazione_turno(self, row, col, assegnazione):
+        tipo_fascia = self.fasce_disponibili[col - 1]
+        dt_turno = self.date_rows[row]
+        
+        dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
+        dialog = AssignTurnoDialog(dipendenti, dt_turno, tipo_fascia.value, self, assegnazione_esistente=assegnazione)
+        
+        if dialog.exec():
+            # In caso di modifica, rimuoviamo la vecchia assegnazione e inseriamo la nuova
+            # (è il modo più pulito per aggiornare i trigger del DB se necessari)
+            id_dip = assegnazione.dipendente.id_dipendente
+            self.interfaccia.turnazione.rimuovi_assegnazione(id_dip, dt_turno, tipo_fascia)
+            
+            try:
+                self.interfaccia.turnazione.assegna_turno(
+                    self.interfaccia.sistema_dipendenti, 
+                    id_dip, 
+                    dt_turno, 
+                    tipo_fascia, 
+                    dialog.piano_scelto, 
+                    dialog.jolly_scelto, 
+                    dialog.corto_scelto
+                )
+                self.aggiorna_tabella()
+            except ValueError as e:
+                QMessageBox.critical(self, "Errore", str(e))
+                self.aggiorna_tabella()
 
     def on_cell_clicked(self, row, col):
         if col == 0: return # Ignora click sulla colonna del giorno
