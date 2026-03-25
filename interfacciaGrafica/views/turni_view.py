@@ -1219,15 +1219,18 @@ class TurniView(QWidget):
         
         # Calcolo visualizzazione parziale (Ore / Max) e differenza
         max_ore = self.interfaccia.turnazione.MAX_ORE
-        diff = ore - max_ore
+        diff = delta # delta è già (ore - max_ore)
         text_ore = f"{ore:.2f} / {max_ore}h"
+        
+        style_ore = "color: #334155;"
         if diff < 0:
             text_ore += f" ({diff:.2f})"
         elif diff > 0:
             text_ore += f" (+{diff:.2f})"
+            style_ore = "color: #ef4444; font-weight: bold;" # Rosso se eccede le 38h
             
         lbl_ore = QLabel(text_ore)
-        lbl_ore.setStyleSheet("color: #334155;")
+        lbl_ore.setStyleSheet(style_ore)
         
         pill = QLabel()
         pill.setFixedWidth(120) # Larghezza fissa per allineamento

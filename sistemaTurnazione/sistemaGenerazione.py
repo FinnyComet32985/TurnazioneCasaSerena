@@ -18,38 +18,71 @@ class SistemaGenerazione:
         """
         Ordina i candidati con un sistema a punteggio multiplo (Gerarchico):
         1. Recency: Chi non svolge questo turno da più tempo (data minore) ha la priorità.
-        2. Carico Settimanale: Chi ha lavorato meno ore nella settimana corrente ha la priorità.
-        3. Banca Ore: Chi ha la banca ore più bassa (o negativa) ha la priorità per recuperare.
+        2. Sequenza/Varietà: Evitiamo sequenze lunghe e favoriamo rotazioni intelligenti (es. Pomeriggio -> Notte).
+        3. Carico Settimanale: Chi ha lavorato meno ore nella settimana corrente ha la priorità.
+        4. Banca Ore: Chi ha la banca ore più bassa (o negativa) ha la priorità per recuperare.
         """
         candidati_con_punteggio = []
         
         for dip in candidati:
+            # 1. Recency specifica per questo tipo di fascia
             last_date_str = sistemaSalvataggio.get_data_ultimo_turno(dip.id_dipendente, tipo_fascia.value)
-            
             if last_date_str:
-                # Ha già fatto questo turno in passato -> data effettiva
                 last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
             else:
-                # Mai fatto questo turno -> data molto vecchia (priorità massima)
                 last_date = date.min 
 
-            # Calcoliamo le ore già lavorate questa settimana per evitare di caricare tutto su uno a inizio settimana
+            # 2. Analisi sequenza recente (Cosa ha fatto ieri/l'altro ieri?)
+            consecutive_count = 0
+            last_type = None
+            
+            # Recuperiamo le assegnazioni già fatte in questa settimana per il dipendente
+            ass_sett = self.turnazione.get_assegnazioni_dipendente((anno, settimana), dip.id_dipendente)
+            ass_sett.sort(key=lambda x: x[0].data_turno, reverse=True) # Dalla più recente
+            
+            if ass_sett:
+                for fascia, _ in ass_sett:
+                    if last_type is None:
+                        last_type = fascia.tipo
+                        consecutive_count = 1
+                    elif fascia.tipo == last_type:
+                        consecutive_count += 1
+                    else:
+                        break
+
+            # Calcolo Punteggio Varietà (Minore è meglio)
+            varieta_score = 0
+            
+            # PENALITÀ: Se sta facendo lo stesso turno, penalizziamo pesantemente dopo il 2° giorno
+            if last_type == tipo_fascia:
+                varieta_score += (consecutive_count * 20)
+            
+            # BONUS "ESCAPE": Se ha fatto Pomeriggi, diamogli la Notte con priorità per sbloccarlo
+            if tipo_fascia == TipoFascia.NOTTE and last_type == TipoFascia.POMERIGGIO:
+                varieta_score -= 30 # Altissima priorità per rompere il ciclo dei pomeriggi
+            
+            # BONUS ROTAZIONE: Se ha fatto Mattina, può passare a Pomeriggio
+            if tipo_fascia == TipoFascia.POMERIGGIO and last_type == TipoFascia.MATTINA:
+                varieta_score -= 10
+
+            # 3. Carico Ore
             ore_settimana = self.turnazione._get_ore_lavorate_settimana(dip.id_dipendente, (anno, settimana))
 
-            # La tupla rappresenta il punteggio. Python ordina le tuple elemento per elemento.
-            # (Data Vecchia < Data Recente) -> Vince Data Vecchia
-            # (Ore Basse < Ore Alte) -> Vince Ore Basse
-            # (Banca Ore Bassa < Banca Ore Alta) -> Vince Banca Ore Bassa
-            candidati_con_punteggio.append((dip, last_date, ore_settimana, dip.banca_ore))
+            # Ordinamento Gerarchico:
+            # 1. varieta_score (Priorità assoluta alla rotazione richiesta)
+            # 2. last_date (Chi non fa questo turno da più tempo)
+            # 3. ore_settimana (Meno ore lavorate)
+            # 4. banca_ore (Banca ore più bassa)
+            candidati_con_punteggio.append((
+                dip, 
+                varieta_score, 
+                last_date, 
+                ore_settimana, 
+                dip.banca_ore
+            ))
         
-        # Mischiamo prima di ordinare per gestire i pareggi (es. due persone con date.min o stessa data) in modo non deterministico
         random.shuffle(candidati_con_punteggio)
-        
-        # Ordiniamo usando la chiave composta
-        # x[1] = last_date
-        # x[2] = ore_settimana
-        # x[3] = banca_ore
-        candidati_con_punteggio.sort(key=lambda x: (x[1], x[2], x[3]))
+        candidati_con_punteggio.sort(key=lambda x: (x[1], x[2], x[3], x[4]))
         
         return [item[0] for item in candidati_con_punteggio]
 

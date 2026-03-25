@@ -506,27 +506,31 @@ class Turnazione:
             
             # Filtro: Se ha già un'assegnazione oggi (compreso RIPOSO automatico)
             if any(f.data_turno == data_turno for f, ass in assegnazioni_sett):
+                # print(f"  - {dip.nome} escluso: già impegnato in questa data")
                 continue
                 
             # Filtro: Massimo 1 NOTTE per settimana
             if tipo_fascia == TipoFascia.NOTTE:
                 if any(f.tipo == TipoFascia.NOTTE for f, ass in assegnazioni_sett):
+                    print(f"  - {dip.nome} escluso: ha già una notte questa settimana")
                     continue
                 
             # 3. Filtro Max Ore Settimanali (Simuliamo inserimento standard, no turno breve per ora)
             # Nota: check_max_ore restituisce [True/False, CausaNuovoTurno]. Ci interessa se passa.
             esito_ore, _ = self._check_max_ore_settimanali(dip.id_dipendente, settimana_key, tipo_fascia, turno_breve=False)
             if not esito_ore:
-                continue
+                pass # Gli straordinari sono permessi nella generazione se necessario
                 
             # 4. Filtro Riposo 11 ore
             try:
                 self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dip, turno_breve=False, piano=0, jolly=False)
-            except ValueError:
+            except ValueError as e:
+                print(f"  - {dip.nome} escluso: {e}")
                 continue # Viola le 11 ore
                 
-            # 5. Filtro Riposo Settimanale (Warning -> Lo trattiamo come bloccante per l'auto-generazione per essere sicuri)
+            # 5. Filtro Riposo Settimanale (BLOCCANTE per garantire le 24h di riposo)
             if not self._check_riposo_settimanale(settimana_key, dip.id_dipendente, data_turno, tipo_fascia, turno_breve=False):
+                print(f"  - {dip.nome} escluso: violazione riposo settimanale 24h")
                 # Bloccante per la generazione automatica per garantire il rispetto del vincolo
                 continue
 
