@@ -139,7 +139,7 @@ class SistemaGenerazione:
                         assigned = False
                         for cand in candidati_ordinati:
                             try:
-                                self.turnazione.assegna_turno(self.sistema_dipendenti, cand.id_dipendente, giorno, tipo_fascia)
+                                self.turnazione.assegna_turno(self.sistema_dipendenti, cand.id_dipendente, giorno, tipo_fascia, stato=StatoFascia.GENERATA)
                                 count_attuale += 1
                                 assigned = True
                                 break # Passa al prossimo slot vuoto
@@ -186,7 +186,7 @@ class SistemaGenerazione:
                         # Se non ha turni e non è in assenza, assegnamo RIPOSO
                         try:
                             self.turnazione.add_turno(giorno, TipoFascia.RIPOSO, StatoFascia.GENERATA)
-                            self.turnazione.assegna_turno(self.sistema_dipendenti, dip.id_dipendente, giorno, TipoFascia.RIPOSO)
+                            self.turnazione.assegna_turno(self.sistema_dipendenti, dip.id_dipendente, giorno, TipoFascia.RIPOSO, stato=StatoFascia.GENERATA)
                         except ValueError as e:
                             # L'assegnazione di un riposo non dovrebbe mai fallire, ma logghiamo l'errore per sicurezza
                             print(f"  -> WARN: Non è stato possibile assegnare RIPOSO a {dip.nome} il {giorno}: {e}")

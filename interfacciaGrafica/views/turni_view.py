@@ -292,10 +292,14 @@ class ShiftCellWidget(QWidget):
         bg, fg = colors.get(stato, ("white", "#334155"))
         self.bg_color = QColor(bg)
         
+        # Se non ci sono assegnazioni, la cella deve essere bianca (non colorata)
         if not assegnazioni:
+            self.bg_color = QColor("white")
+            # Usa colore neutro per il testo di aggiunta
+            fg_empty = "#94a3b8" 
             lbl = QLabel("+ Aggiungi")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(f"color: {fg}; font-size: 11px; font-weight: 500; background: transparent; border: none;")
+            lbl.setStyleSheet(f"color: {fg_empty}; font-size: 11px; font-weight: 500; background: transparent; border: none;")
             self.layout.addWidget(lbl, 0, 0)
         else:
             # Aggiunge le pillole in una griglia
@@ -924,7 +928,8 @@ class TurniView(QWidget):
             
             # Evita divisione per zero nel massimo della progress bar
             pbar.setMaximum(tgt if tgt > 0 else 1)
-            pbar.setValue(act)
+            # Cap a 100% se il numero di assegnati supera il target
+            pbar.setValue(min(act, tgt))
             lbl.setText(f"{act}/{tgt}")
 
         # Aggiorna le due liste dinamiche

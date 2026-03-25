@@ -534,7 +534,7 @@ class Turnazione:
             
         return candidati
 
-    def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False) -> bool:
+    def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False, stato: StatoFascia = StatoFascia.CREATO) -> bool:
         """Cerca la fascia specifica e aggiunge l'assegnazione (che salva su DB)."""
         anno, settimana, _ = data_turno.isocalendar()
         settimana_key = (anno, settimana)
@@ -593,10 +593,10 @@ class Turnazione:
         if not esito:
             raise ValueError("Assegnazione bloccata dal database. Il dipendente potrebbe essere in Ferie/Malattia in questa data.")
 
-        # Se non è un automatismo di RIPOSO, impostiamo lo stato a MODIFICATO
+        # Se non è un automatismo di RIPOSO, impostiamo lo stato (default CREATO per manuale)
         if esito and tipo_fascia != TipoFascia.RIPOSO:
-            fascia.stato = StatoFascia.MODIFICATA
-            sistemaSalvataggio.update_stato_turno(fascia.id_turno, StatoFascia.MODIFICATA.value)
+            fascia.stato = stato
+            sistemaSalvataggio.update_stato_turno(fascia.id_turno, stato.value)
 
         # AUTOMATISMO: Se è un turno di NOTTE, assegna automaticamente 2 giorni di RIPOSO (smontante e riposo)
         if esito and tipo_fascia == TipoFascia.NOTTE:
