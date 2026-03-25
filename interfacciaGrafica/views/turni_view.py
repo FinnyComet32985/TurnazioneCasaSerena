@@ -318,13 +318,28 @@ class DipendentePill(QFrame):
         """)
         
         edit_action = menu.addAction("Modifica")
+        edit_action.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/pencil.svg", "#3b82f6"))
         delete_action = menu.addAction("Elimina")
+        delete_action.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
         
         action = menu.exec(self.mapToGlobal(pos))
         if action == edit_action:
             self.editRequested.emit(self.assegnazione)
         elif action == delete_action:
             self.deleteRequested.emit(self.assegnazione.dipendente.id_dipendente)
+
+    def get_colored_icon(self, icon_path, color_hex):
+        pixmap = QPixmap(icon_path)
+        if pixmap.isNull(): return QIcon()
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor(color_hex))
+        painter.end()
+        icon = QIcon(pixmap)
+        # Forza la stessa pixmap anche per lo stato disabilitato (evita il grigio di sistema)
+        icon.addPixmap(pixmap, QIcon.Mode.Disabled, QIcon.State.Off)
+        icon.addPixmap(pixmap, QIcon.Mode.Disabled, QIcon.State.On)
+        return icon
 
 class ShiftCellWidget(QWidget):
     clicked = pyqtSignal(int, int) # Segnale personalizzato per il click
@@ -571,8 +586,10 @@ class TurniView(QWidget):
         btn_next.clicked.connect(self.next_week)
         
         # Bottone Genera (Spostato qui per comodità)
-        self.btn_genera_main = QPushButton("✨ Genera")
-        self.btn_genera_main.setFixedSize(90, 40)
+        self.btn_genera_main = QPushButton(" Genera")
+        self.btn_genera_main.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/sparkles.svg", "#5b21b6"))
+        self.btn_genera_main.setIconSize(QSize(20, 20))
+        self.btn_genera_main.setFixedSize(110, 40)
         self.btn_genera_main.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_genera_main.setStyleSheet("""
             QPushButton {
@@ -584,10 +601,12 @@ class TurniView(QWidget):
         self.btn_genera_main.clicked.connect(self.genera_turni_auto)
 
         # Bottone Oggi
-        self.btn_today = QPushButton("Oggi")
+        self.btn_today = QPushButton(" Oggi")
+        self.btn_today.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/calendar-number.svg", "#3b82f6")) # Blu
+        self.btn_today.setIconSize(QSize(20, 20))
         self.btn_today.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_today.setFixedHeight(40)
-        self.btn_today.setFixedWidth(80)
+        self.btn_today.setFixedWidth(100)
         self.btn_today.clicked.connect(self.go_today)
         
         header_layout.addWidget(btn_prev)
@@ -618,6 +637,14 @@ class TurniView(QWidget):
             }
             QPushButton:hover { background-color: #dcfce7; border-color: #6ee7b7; }
         """
+        # Stile Arancione per Riapri Settimana
+        reopen_style = """
+            QPushButton {
+                background-color: #fff7ed; border: 1px solid #fdba74; border-radius: 6px;
+                padding: 8px 16px; font-weight: bold; color: #c2410c; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #ffedd5; border-color: #fb923c; }
+        """
         svuota_style = """
             QPushButton {
                 background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 6px;
@@ -625,12 +652,21 @@ class TurniView(QWidget):
             }
             QPushButton:hover { background-color: #fee2e2; border-color: #fca5a5; }
         """
-        self.btn_modifica = QPushButton("✏️ Modifica")
-        self.btn_approva = QPushButton("✅ Approva")
-        self.btn_svuota = QPushButton("🗑️ Svuota")
-        self.btn_pdf = QPushButton("📄 Esporta")
+        self.btn_modifica = QPushButton(" Riapri Settimana")
+        self.btn_modifica.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/lock-open.svg", "#c2410c"))
+        self.btn_modifica.setIconSize(QSize(20, 20))
+        self.btn_modifica.setStyleSheet(reopen_style)
         
-        self.btn_modifica.setStyleSheet(btn_style_header)
+        self.btn_approva = QPushButton(" Approva")
+        self.btn_approva.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/checkbox.svg", "#166534"))
+        self.btn_approva.setIconSize(QSize(20, 20))
+        self.btn_svuota = QPushButton(" Svuota")
+        self.btn_svuota.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/trash-bin.svg", "#991b1b"))
+        self.btn_svuota.setIconSize(QSize(20, 20))
+        self.btn_pdf = QPushButton(" Esporta")
+        self.btn_pdf.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/document-attach.svg", "#334155"))
+        self.btn_pdf.setIconSize(QSize(20, 20))
+        
         self.btn_approva.setStyleSheet(approve_style)
         self.btn_svuota.setStyleSheet(svuota_style)
         self.btn_pdf.setStyleSheet(btn_style_header)
@@ -872,8 +908,12 @@ class TurniView(QWidget):
         empty_label = QLabel("Nessun turno trovato per questa settimana.")
         empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        btn_genera = QPushButton("✨ Genera Turni (A.I.)")
-        btn_crea_zero = QPushButton("📝 Crea da zero (Svuota Tabella)")
+        btn_genera = QPushButton(" Genera Turni (A.I.)")
+        btn_genera.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/sparkles.svg", "#ffffff"))
+        btn_genera.setIconSize(QSize(20, 20))
+        btn_crea_zero = QPushButton(" Crea da zero (Svuota Tabella)")
+        btn_crea_zero.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/document.svg", "#ffffff"))
+        btn_crea_zero.setIconSize(QSize(20, 20))
         btn_genera.setFixedWidth(250)
         btn_crea_zero.setFixedWidth(250)
         
@@ -938,9 +978,11 @@ class TurniView(QWidget):
         this_monday = today - timedelta(days=today.weekday())
         if self.current_monday == this_monday:
              self.btn_today.setStyleSheet("background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; font-weight: bold; border-radius: 8px;")
+             self.btn_today.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/calendar-number.svg", "#3b82f6")) # Blu acceso anche se disabilitato
              self.btn_today.setEnabled(False)
         else:
              self.btn_today.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; font-weight: normal; border-radius: 8px;")
+             self.btn_today.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/calendar-number.svg", "#3b82f6"))
              self.btn_today.setEnabled(True)
 
         # Controllo stato approvazione per pulsanti
@@ -960,13 +1002,12 @@ class TurniView(QWidget):
             self.btn_approva.hide()
             self.btn_svuota.hide()
             self.btn_modifica.show()
-            self.btn_modifica.setText("🔓 Riapri Settimana")
-            self.btn_modifica.setStyleSheet("background-color: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 16px; font-weight: bold; border-radius: 6px;")
+            self.btn_pdf.show()
         else:
             self.btn_approva.show()
             self.btn_svuota.show()
             self.btn_modifica.hide()
-            self.btn_modifica.setText("✏️ Modifica")
+            self.btn_pdf.hide()
 
     def update_dashboard_data(self):
         # 1. Copertura Turni (Calcolata sui limiti configurati)
@@ -1473,3 +1514,17 @@ class TurniView(QWidget):
                 self.aggiorna_tabella()
             else:
                 QMessageBox.warning(self, "Errore", "Impossibile svuotare la settimana. Verifica che non sia già approvata.")
+
+    def get_colored_icon(self, icon_path, color_hex):
+        """Ricolora un'icona SVG/PNG usando QPainter"""
+        pixmap = QPixmap(icon_path)
+        if pixmap.isNull():
+            return QIcon()
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor(color_hex))
+        painter.end()
+        icon = QIcon(pixmap)
+        icon.addPixmap(pixmap, QIcon.Mode.Disabled, QIcon.State.Off)
+        icon.addPixmap(pixmap, QIcon.Mode.Disabled, QIcon.State.On)
+        return icon
