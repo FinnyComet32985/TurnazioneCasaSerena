@@ -47,7 +47,11 @@ class Turnazione:
         
         # Configurazione Default (inizializzata in memoria per evitare query DB in loop)
         self.max_jolly_per_turno = 1
-        self.max_dipendenti_per_piano = 3
+        self.limiti_piano = {
+            1: 4, # Piano 1: max 3
+            2: 3, # Piano 2: max 3
+            3: 1  # Piano 3: max 1
+        }
         self.limiti_fascia = {
             TipoFascia.MATTINA: 7,
             TipoFascia.POMERIGGIO: 6,
@@ -555,10 +559,14 @@ class Turnazione:
             if jolly_count >= self.max_jolly_per_turno:
                 raise ValueError(f"Limite massimo di {self.max_jolly_per_turno} Jolly raggiunto per questo turno.")
 
-        if piano is not None:
-            piano_count = sum(1 for a in fascia.assegnazioni if getattr(a, 'piano', None) == piano)
-            if piano_count >= self.max_dipendenti_per_piano:
-                raise ValueError(f"Limite di {self.max_dipendenti_per_piano} dipendenti per il piano {piano} raggiunto.")
+        if piano is not None and not jolly:
+            # Recupera il limite specifico per il piano (default 3 se non specificato)
+            max_p = self.limiti_piano.get(piano, 3)
+            # Conta quanti dipendenti sono su quel piano escludendo i Jolly
+            piano_count = sum(1 for a in fascia.assegnazioni if getattr(a, 'piano', None) == piano and not getattr(a, 'jolly', False))
+            
+            if piano_count >= max_p:
+                raise ValueError(f"Limite di {max_p} dipendenti per il piano {piano} raggiunto (Jolly esclusi).")
 
         # Controllo vincolo ore massime settimanali
         esito_ore, causa_nuovo = self._check_max_ore_settimanali(id_dipendente, settimana_key, tipo_fascia, turno_breve)
@@ -584,6 +592,11 @@ class Turnazione:
         esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly))
         if not esito:
             raise ValueError("Assegnazione bloccata dal database. Il dipendente potrebbe essere in Ferie/Malattia in questa data.")
+
+        # Se non è un automatismo di RIPOSO, impostiamo lo stato a MODIFICATO
+        if esito and tipo_fascia != TipoFascia.RIPOSO:
+            fascia.stato = StatoFascia.MODIFICATA
+            sistemaSalvataggio.update_stato_turno(fascia.id_turno, StatoFascia.MODIFICATA.value)
 
         # AUTOMATISMO: Se è un turno di NOTTE, assegna automaticamente 2 giorni di RIPOSO (smontante e riposo)
         if esito and tipo_fascia == TipoFascia.NOTTE:
@@ -619,7 +632,23 @@ class Turnazione:
             print("Impossibile rimuovere assegnazione: La settimana è APPROVATA. Esegui prima 'Riapri Settimana'.")
             return False
 
-        return fascia.remove_assegnazione(id_dipendente)
+        esito = fascia.remove_assegnazione(id_dipendente)
+        
+        # AUTOMATISMO: Se rimuovo una NOTTE, provo a rimuovere anche i 2 RIPOSI automatici successivi
+        if esito and tipo_fascia == TipoFascia.NOTTE:
+            data_domani = data_turno + timedelta(days=1)
+            data_dopodomani = data_turno + timedelta(days=2)
+            
+            for giorno_r in [data_domani, data_dopodomani]:
+                # Cerchiamo se il dipendente ha un riposo in quel giorno
+                # Non usiamo ricorsione infinita, chiamiamo direttamente la logica di rimozione base sulla fascia RIPOSO
+                anno_r, sett_r, _ = giorno_r.isocalendar()
+                fascia_r = self.turnazioneSettimanale.get((anno_r, sett_r), {}).get(giorno_r, {}).get(TipoFascia.RIPOSO)
+                if fascia_r:
+                    # Rimuoviamo il dipendente dal riposo (se presente)
+                    fascia_r.remove_assegnazione(id_dipendente)
+                    
+        return esito
 
     def svuota_settimana(self, anno: int, settimana: int) -> bool:
         """

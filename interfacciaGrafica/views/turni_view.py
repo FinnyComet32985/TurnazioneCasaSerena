@@ -1,15 +1,16 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout,
     QPushButton, QTableWidget, QTableWidgetItem, 
-    QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog,
-    QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar
+    QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog, QCheckBox,
+    QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter
 )
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-from PyQt6.QtCore import Qt, QSize, QDate, QRect
+from PyQt6.QtCore import Qt, QSize, QDate, QRect, pyqtSignal
 from datetime import datetime, date, timedelta
 
 # Import per accedere ai riferimenti
 from sistemaTurnazione.fasciaOraria import TipoFascia, StatoFascia
+from sistemaDipendenti.dipendente import StatoDipendente
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 
 class AssignTurnoDialog(QDialog):
@@ -18,21 +19,76 @@ class AssignTurnoDialog(QDialog):
         self.setWindowTitle(f"Assegna Turno - {dt_turno} ({tipo_fascia})")
         self.setFixedWidth(350)
         self.id_scelto = None
+        self.piano_scelto = 1
+        self.jolly_scelto = False
+        self.corto_scelto = False
         
         layout = QVBoxLayout(self)
+        layout.setSpacing(15)
         
-        layout.addWidget(QLabel("Seleziona il Dipendente:"))
+        # Selezione Dipendente
+        layout.addWidget(QLabel("<b>Seleziona il Dipendente:</b>"))
         self.combo = QComboBox()
-        self.combo.setStyleSheet("color: #0f172a; background-color: white; border: 1px solid #cbd5e1; padding: 4px;")
+        self.combo.setEditable(True)
+        self.combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.combo.lineEdit().setPlaceholderText("Cerca dipendente...")
+        
+        # Stile per la combo ricercabile
+        self.combo.setStyleSheet("""
+            QComboBox { color: #0f172a; background-color: white; border: 1px solid #cbd5e1; padding: 6px; border-radius: 4px; }
+            QComboBox QLineEdit { border: none; background: transparent; }
+            QComboBox QAbstractItemView { background-color: white; selection-background-color: #f1f5f9; selection-color: #0f172a; border: 1px solid #cbd5e1; }
+        """)
+        
+        # Configura il completatore per cercare all'interno del testo
+        completer = self.combo.completer()
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        
+        # Aggiungiamo un item vuoto all'inizio o usiamo currentIndex -1
+        # L'approccio migliore con Editable è caricare tutto e forzare -1
         for dip in dipendenti:
-            # Opzionale: filtrare solo quelli 'ASSUNTI'
             if dip.stato.name == "ASSUNTO":
                 self.combo.addItem(f"{dip.nome} {dip.cognome}", userData=dip.id_dipendente)
+        
+        # Forza la combo ad essere vuota all'apertura
+        self.combo.setCurrentIndex(-1)
+        self.combo.lineEdit().setText("")
         layout.addWidget(self.combo)
         
+        # Selezione Piano
+        layout.addWidget(QLabel("<b>Piano di lavoro:</b>"))
+        self.combo_piano = QComboBox()
+        self.combo_piano.addItems(["Piano 1", "Piano 2", "Piano 3"])
+        self.combo_piano.setStyleSheet("color: #0f172a; background-color: white; border: 1px solid #cbd5e1; padding: 6px; border-radius: 4px;")
+        layout.addWidget(self.combo_piano)
+        
+        # Opzioni aggiuntive
+        opts_layout = QHBoxLayout()
+        self.check_jolly = QCheckBox("Operatore Jolly")
+        self.check_jolly.setStyleSheet("font-weight: 500;")
+        
+        self.check_corto = QCheckBox("Turno Corto")
+        self.check_corto.setStyleSheet("font-weight: 500;")
+        # Abilita "Corto" solo se è mattina
+        if tipo_fascia != "MATTINA":
+            self.check_corto.setEnabled(False)
+            self.check_corto.setToolTip("Disponibile solo per il turno di Mattina")
+            
+        opts_layout.addWidget(self.check_jolly)
+        opts_layout.addWidget(self.check_corto)
+        layout.addLayout(opts_layout)
+        
+        # Pulsanti
         btn_layout = QHBoxLayout()
-        btn_salva = QPushButton("Assegna")
+        btn_salva = QPushButton("Conferma Assegnazione")
+        btn_salva.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_salva.setStyleSheet("background-color: #2563eb; color: white; border-radius: 6px; padding: 8px; font-weight: bold;")
+        
         btn_annulla = QPushButton("Annulla")
+        btn_annulla.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_annulla.setStyleSheet("background-color: #f1f5f9; color: #475569; border-radius: 6px; padding: 8px;")
+        
         btn_salva.clicked.connect(self.accept)
         btn_annulla.clicked.connect(self.reject)
         btn_layout.addWidget(btn_salva)
@@ -42,6 +98,9 @@ class AssignTurnoDialog(QDialog):
         
     def accept(self):
         self.id_scelto = self.combo.currentData()
+        self.piano_scelto = self.combo_piano.currentIndex() + 1
+        self.jolly_scelto = self.check_jolly.isChecked()
+        self.corto_scelto = self.check_corto.isChecked()
         super().accept()
 
 class WeekSelectorDialog(QDialog):
@@ -169,6 +228,96 @@ class DayWidget(QWidget):
         painter.drawLine(self.rect().bottomLeft(), self.rect().bottomRight())
         
         super().paintEvent(event) # Lascia che l'evento di base disegni i figli (le label)
+
+class DipendentePill(QFrame):
+    def __init__(self, assegnazione, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(24)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 0, 6, 0)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        dipendente = assegnazione.dipendente
+        # Nome sintetico: Rossi M.
+        nome_str = f"<b>{dipendente.cognome} {dipendente.nome[0]}.</b>"
+        
+        # Indicatori: [P1] [J] [C]
+        info_tags = []
+        if getattr(assegnazione, 'piano', None):
+            info_tags.append(f"<span style='color: #2563eb;'>P{assegnazione.piano}</span>")
+        if getattr(assegnazione, 'jolly', False):
+            info_tags.append("<span style='color: #7c3aed;'>J</span>")
+        if getattr(assegnazione, 'turnoBreve', False):
+            info_tags.append("<span style='color: #ea580c;'>C</span>")
+            
+        tags_str = " ".join(info_tags)
+        final_text = f"{nome_str} {tags_str}" if info_tags else nome_str
+        
+        lbl = QLabel(final_text)
+        lbl.setStyleSheet("font-size: 11px; color: #334155; background: transparent; border: none;")
+        layout.addWidget(lbl)
+        
+        self.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+            }
+        """)
+
+class ShiftCellWidget(QWidget):
+    clicked = pyqtSignal(int, int) # Segnale personalizzato per il click
+    
+    def __init__(self, row, col, stato, assegnazioni, parent=None):
+        super().__init__(parent)
+        self.row = row
+        self.col = col
+        
+        # Layout a griglia (2 colonne) per i dipendenti
+        self.layout = QGridLayout(self)
+        self.layout.setContentsMargins(4, 4, 4, 4)
+        self.layout.setSpacing(4)
+        self.layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        
+        # Mapping colori stati (Migliorato per visibilità)
+        colors = {
+            StatoFascia.APPROVATA: ("#dcfce7", "#166534"), # Verde
+            StatoFascia.MODIFICATA: ("#ffedd5", "#9a3412"), # Arancio
+            StatoFascia.GENERATA: ("#f5f3ff", "#5b21b6"), # Viola (AI)
+            StatoFascia.CREATO: ("#f0f9ff", "#075985"), # Blu (Auto)
+            StatoFascia.VUOTA: ("#ffffff", "#94a3b8")
+        }
+        
+        bg, fg = colors.get(stato, ("white", "#334155"))
+        self.bg_color = QColor(bg)
+        
+        if not assegnazioni:
+            lbl = QLabel("+ Aggiungi")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(f"color: {fg}; font-size: 11px; font-weight: 500; background: transparent; border: none;")
+            self.layout.addWidget(lbl, 0, 0)
+        else:
+            # Aggiunge le pillole in una griglia
+            for i, ass in enumerate(assegnazioni):
+                r = i // 3 # 3 colonne
+                c = i % 3
+                pill = DipendentePill(ass)
+                self.layout.addWidget(pill, r, c)
+                
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), self.bg_color)
+        
+        # Bordi griglia
+        painter.setPen(QColor("#e2e8f0"))
+        painter.drawLine(self.rect().topRight(), self.rect().bottomRight())
+        painter.drawLine(self.rect().bottomLeft(), self.rect().bottomRight())
+        painter.end()
+
+    def mousePressEvent(self, event):
+        self.clicked.emit(self.row, self.col)
+        super().mousePressEvent(event)
 
 class ShiftHeaderView(QHeaderView):
     def __init__(self, orientation, parent, fasce, orari):
@@ -346,6 +495,19 @@ class TurniView(QWidget):
         btn_next.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_next.setStyleSheet("QPushButton { border: 1px solid #cbd5e1; border-radius: 20px; background-color: white; } QPushButton:hover { background-color: #f1f5f9; }")
         btn_next.clicked.connect(self.next_week)
+        
+        # Bottone Genera (Spostato qui per comodità)
+        self.btn_genera_main = QPushButton("✨ Genera")
+        self.btn_genera_main.setFixedSize(90, 40)
+        self.btn_genera_main.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_genera_main.setStyleSheet("""
+            QPushButton {
+                background-color: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px;
+                color: #5b21b6; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #ede9fe; }
+        """)
+        self.btn_genera_main.clicked.connect(self.genera_turni_auto)
 
         # Bottone Oggi
         self.btn_today = QPushButton("Oggi")
@@ -359,6 +521,8 @@ class TurniView(QWidget):
         header_layout.addWidget(btn_next)
         header_layout.addSpacing(10)
         header_layout.addWidget(self.btn_today)
+        header_layout.addSpacing(10)
+        header_layout.addWidget(self.btn_genera_main)
         
         header_layout.addStretch()
         layout.addLayout(header_layout)
@@ -387,6 +551,9 @@ class TurniView(QWidget):
         self.btn_modifica.setStyleSheet(btn_style_header)
         self.btn_approva.setStyleSheet(approve_style)
         self.btn_pdf.setStyleSheet(btn_style_header)
+
+        self.btn_approva.clicked.connect(self.approva_settimana_ui)
+        self.btn_modifica.clicked.connect(self.riapri_settimana_ui)
 
         action_btn_layout.addWidget(self.btn_modifica)
         action_btn_layout.addWidget(self.btn_approva)
@@ -540,6 +707,37 @@ class TurniView(QWidget):
         dashboard_layout.addWidget(self.summary_card, stretch=1)
         
         layout.addLayout(dashboard_layout)
+        
+        # --- LEGENDA COLORI (Sotto le card, prima della tabella) ---
+        legenda_layout = QHBoxLayout()
+        legenda_layout.setContentsMargins(15, 0, 15, 0) # Margine maggiore per allinearsi alle card
+        legenda_layout.setSpacing(15)
+        
+        def create_legend_item(color_hex, text):
+            item = QWidget()
+            it_layout = QHBoxLayout(item)
+            it_layout.setContentsMargins(0, 0, 0, 0)
+            it_layout.setSpacing(6)
+            
+            circle = QFrame()
+            circle.setFixedSize(14, 14) # Un po' più grande per leggibilità
+            circle.setStyleSheet(f"background-color: {color_hex}; border: 1px solid #cbd5e1; border-radius: 7px;")
+            
+            lbl = QLabel(text)
+            lbl.setStyleSheet("color: #64748b; font-size: 12px; font-weight: 600;") # Font più chiaro
+            
+            it_layout.addWidget(circle)
+            it_layout.addWidget(lbl)
+            return item
+            
+        legenda_layout.addWidget(create_legend_item("#f5f3ff", "Generato (AI)"))
+        legenda_layout.addWidget(create_legend_item("#f0f9ff", "Creato"))
+        legenda_layout.addWidget(create_legend_item("#ffedd5", "Modificato (Manuale)"))
+        legenda_layout.addWidget(create_legend_item("#dcfce7", "Approvato"))
+        legenda_layout.addStretch()
+        
+        layout.addLayout(legenda_layout)
+        layout.addSpacing(5) # Un po' di aria prima della tabella
 
         # --- TABELLA (O Empty State) ---
         self.body_container = QWidget()
@@ -659,6 +857,29 @@ class TurniView(QWidget):
         else:
              self.btn_today.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; font-weight: normal; border-radius: 8px;")
              self.btn_today.setEnabled(True)
+
+        # Controllo stato approvazione per pulsanti
+        anno, settimana, _ = self.current_monday.isocalendar()
+        settimana_dict = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana))
+        
+        is_approved = False
+        if settimana_dict:
+            for g in settimana_dict.values():
+                for f in g.values():
+                    if f.stato == StatoFascia.APPROVATA:
+                        is_approved = True
+                        break
+                if is_approved: break
+        
+        if is_approved:
+            self.btn_approva.hide()
+            self.btn_modifica.show()
+            self.btn_modifica.setText("🔓 Riapri Settimana")
+            self.btn_modifica.setStyleSheet("background-color: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 16px; font-weight: bold; border-radius: 6px;")
+        else:
+            self.btn_approva.show()
+            self.btn_modifica.hide()
+            self.btn_modifica.setText("✏️ Modifica")
 
     def update_dashboard_data(self):
         # 1. Copertura Turni (Calcolata sui limiti configurati)
@@ -994,23 +1215,16 @@ class TurniView(QWidget):
 
                 if tipo_fascia in fasce_giorno:
                     fascia = fasce_giorno[tipo_fascia]
-                    assegnati = ", ".join([f"{a.dipendente.nome} {a.dipendente.cognome}" for a in fascia.assegnazioni])
-                    testo = assegnati if assegnati else "+ Aggiungi"
+                    assegnazioni = fascia.assegnazioni
+                    stato = fascia.stato
                 else:
-                    testo = "+ Aggiungi" 
+                    assegnazioni = []
+                    stato = StatoFascia.VUOTA
 
-                item = QTableWidgetItem(testo)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                
-                if testo == "+ Aggiungi":
-                    item.setForeground(QColor("#94a3b8"))
-                else:
-                    item.setForeground(QColor("#334155"))
-                    item.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-                    
-                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable) 
-                
-                self.table.setItem(row, table_col, item)
+                # Utilizziamo il nuovo widget personalizzato
+                cell_widget = ShiftCellWidget(row, table_col, stato, assegnazioni, self.table)
+                cell_widget.clicked.connect(self.on_cell_clicked)
+                self.table.setCellWidget(row, table_col, cell_widget)
 
     def on_cell_clicked(self, row, col):
         if col == 0: return # Ignora click sulla colonna del giorno
@@ -1019,16 +1233,27 @@ class TurniView(QWidget):
         dt_turno = self.date_rows[row]
         
         dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
+        
+        # Recupera la fascia selezionata per controllare lo stato
+        anno, settimana, _ = dt_turno.isocalendar()
+        fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
+        
+        if fascia and fascia.stato == StatoFascia.APPROVATA:
+            QMessageBox.information(self, "Blocco Modifica", "Questa settimana è stata APPROVATA e i conteggi banca ore sono stati consolidati.\n\nPer apportare modifiche, clicca sul pulsante 'Riapri Settimana' in alto a destra.")
+            return
+
         dialog = AssignTurnoDialog(dipendenti, dt_turno, tipo_fascia.value, self)
         if dialog.exec() and dialog.id_scelto is not None:
-            # Esegui assegnazione (per ora Piano=0, Jolly=False, Breve=False)
+            # Esegui assegnazione con parametri estesi
             try:
                 self.interfaccia.turnazione.assegna_turno(
                     self.interfaccia.sistema_dipendenti, 
                     dialog.id_scelto, 
                     dt_turno, 
                     tipo_fascia, 
-                    0, False, False
+                    dialog.piano_scelto, 
+                    dialog.jolly_scelto, 
+                    dialog.corto_scelto
                 )
                 self.aggiorna_tabella()
             except Exception as e:
@@ -1049,4 +1274,44 @@ class TurniView(QWidget):
         self.aggiorna_tabella()
         
     def genera_turni_auto(self):
-        QMessageBox.information(self, "Coming Soon", "Questa funzionalità applicherà algoritmi per generare tutti i turni.")
+        # Conferma
+        reply = QMessageBox.question(self, "Generazione Automatica", 
+                                   "Vuoi avviare la generazione automatica dei turni per questa settimana usando l'algoritmo di rotazione?\n\nNota: i turni esistenti verranno mantenuti, verranno riempiti solo i posti vacanti.",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            anno, settimana, _ = self.current_monday.isocalendar()
+            from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
+            generatore = SistemaGenerazione(self.interfaccia.turnazione, self.interfaccia.sistema_dipendenti)
+            
+            if generatore.genera_turnazione_automatica(anno, settimana):
+                QMessageBox.information(self, "Completato", "Turnazione generata con successo.")
+                self.aggiorna_tabella()
+            else:
+                QMessageBox.critical(self, "Errore", "Si è verificato un errore durante la generazione.")
+
+    def approva_settimana_ui(self):
+        reply = QMessageBox.question(self, "Approvazione Settimana", 
+                                   "Con l'approvazione, i saldi ore verranno consolidati nella banca ore dei dipendenti e la settimana verrà bloccata.\n\nVuoi procedere?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            anno, settimana, _ = self.current_monday.isocalendar()
+            if self.interfaccia.turnazione.approva_settimana(self.interfaccia.sistema_dipendenti, (anno, settimana)):
+                QMessageBox.information(self, "Approvata", "Settimana approvata e banca ore aggiornata.")
+                self.aggiorna_tabella()
+            else:
+                QMessageBox.warning(self, "Errore", "Impossibile approvare la settimana.")
+
+    def riapri_settimana_ui(self):
+        reply = QMessageBox.question(self, "Riapertura Settimana", 
+                                   "Riaprendo la settimana, i saldi banca ore precedentemente calcolati verranno stornati.\n\nVuoi proseguire con lo sblocco?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            anno, settimana, _ = self.current_monday.isocalendar()
+            if self.interfaccia.turnazione.riapri_settimana(self.interfaccia.sistema_dipendenti, (anno, settimana)):
+                QMessageBox.information(self, "Riaperta", "Settimana riaperta. I turni sono ora modificabili.")
+                self.aggiorna_tabella()
+            else:
+                QMessageBox.warning(self, "Errore", "Impossibile riaprire la settimana.")
