@@ -1307,6 +1307,13 @@ class TurniView(QWidget):
         tipo_fascia = self.fasce_disponibili[col - 1]
         dt_turno = self.date_rows[row]
         
+        # Check approvazione
+        anno, settimana, _ = dt_turno.isocalendar()
+        fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
+        if fascia and fascia.stato == StatoFascia.APPROVATA:
+            QMessageBox.information(self, "Blocco Modifica", "Questa settimana è stata APPROVATA e i conteggi banca ore sono stati consolidati.\n\nPer apportare modifiche, clicca sul pulsante 'Riapri Settimana' in alto a destra.")
+            return
+
         # Conferma eliminazione
         res = QMessageBox.question(self, "Elimina Turno", "Sei sicuro di voler rimuovere questo dipendente dal turno?")
         if res == QMessageBox.StandardButton.Yes:
@@ -1316,6 +1323,13 @@ class TurniView(QWidget):
     def modifica_assegnazione_turno(self, row, col, assegnazione):
         tipo_fascia = self.fasce_disponibili[col - 1]
         dt_turno = self.date_rows[row]
+        
+        # Check approvazione
+        anno, settimana, _ = dt_turno.isocalendar()
+        fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
+        if fascia and fascia.stato == StatoFascia.APPROVATA:
+            QMessageBox.information(self, "Blocco Modifica", "Questa settimana è stata APPROVATA e i conteggi banca ore sono stati consolidati.\n\nPer apportare modifiche, clicca sul pulsante 'Riapri Settimana' in alto a destra.")
+            return
         
         dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
         dialog = AssignTurnoDialog(dipendenti, dt_turno, tipo_fascia.value, self, assegnazione_esistente=assegnazione)
