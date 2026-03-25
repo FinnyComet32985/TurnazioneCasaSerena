@@ -13,9 +13,9 @@ class TipoFascia(Enum):
     RIPOSO = "RIPOSO"
 
 class StatoFascia(Enum):
-    GENERATA = "GENERATA"
-    MODIFICATA = "MODIFICATA"
-    APPROVATA = "APPROVATA"
+    GENERATA = "GENERATO"
+    MODIFICATA = "MODIFICATO"
+    APPROVATA = "APPROVATO"
     VUOTA = "VUOTA"
     CREATO = "CREATO"
 

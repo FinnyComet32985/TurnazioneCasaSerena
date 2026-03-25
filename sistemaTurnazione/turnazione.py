@@ -498,6 +498,17 @@ class Turnazione:
             if sistema_dipendenti.verifica_assenza(dip.id_dipendente, data_turno):
                 continue
                 
+            assegnazioni_sett = self.get_assegnazioni_dipendente(settimana_key, dip.id_dipendente)
+            
+            # Filtro: Se ha già un'assegnazione oggi (compreso RIPOSO automatico)
+            if any(f.data_turno == data_turno for f, ass in assegnazioni_sett):
+                continue
+                
+            # Filtro: Massimo 1 NOTTE per settimana
+            if tipo_fascia == TipoFascia.NOTTE:
+                if any(f.tipo == TipoFascia.NOTTE for f, ass in assegnazioni_sett):
+                    continue
+                
             # 3. Filtro Max Ore Settimanali (Simuliamo inserimento standard, no turno breve per ora)
             # Nota: check_max_ore restituisce [True/False, CausaNuovoTurno]. Ci interessa se passa.
             esito_ore, _ = self._check_max_ore_settimanali(dip.id_dipendente, settimana_key, tipo_fascia, turno_breve=False)
@@ -574,13 +585,23 @@ class Turnazione:
         if not esito:
             raise ValueError("Assegnazione bloccata dal database. Il dipendente potrebbe essere in Ferie/Malattia in questa data.")
 
-        # AUTOMATISMO: Se è un turno di NOTTE, assegna automaticamente RIPOSO il giorno dopo
+        # AUTOMATISMO: Se è un turno di NOTTE, assegna automaticamente 2 giorni di RIPOSO (smontante e riposo)
         if esito and tipo_fascia == TipoFascia.NOTTE:
             data_domani = data_turno + timedelta(days=1)
-            # La chiamata ricorsiva ora sarà molto più leggera grazie all'early return
-            if self.add_turno(data_domani, TipoFascia.RIPOSO, StatoFascia.CREATO):
-                print(f"Assegnazione automatica RIPOSO per {dipendente_obj.nome} {dipendente_obj.cognome} il {data_domani}")
-                self.assegna_turno(sistema_dipendenti, id_dipendente, data_domani, TipoFascia.RIPOSO, piano=None)
+            data_dopodomani = data_turno + timedelta(days=2)
+            
+            for giorno_riposo in [data_domani, data_dopodomani]:
+                anno_r, sett_r, _ = giorno_riposo.isocalendar()
+                
+                # Inizializza la settimana se non esiste o è incompleta
+                settimana_dict = self.turnazioneSettimanale.get((anno_r, sett_r), {})
+                if len(settimana_dict) < 7:
+                    self.inizializza_settimana(anno_r, sett_r)
+                    
+                if self.add_turno(giorno_riposo, TipoFascia.RIPOSO, StatoFascia.CREATO):
+                    desc_riposo = "smontante" if giorno_riposo == data_domani else "riposo"
+                    print(f"Assegnazione automatica turno RIPOSO ({desc_riposo}) per {dipendente_obj.nome} {dipendente_obj.cognome} il {giorno_riposo}")
+                    self.assegna_turno(sistema_dipendenti, id_dipendente, giorno_riposo, TipoFascia.RIPOSO, piano=None)
 
         return esito
 
