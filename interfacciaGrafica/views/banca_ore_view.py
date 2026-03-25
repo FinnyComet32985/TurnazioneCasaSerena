@@ -19,6 +19,7 @@ class RegolaBancaOreDialog(QDialog):
         layout.addRow(self.lbl_info)
         
         self.spin_ore = QDoubleSpinBox()
+        self.spin_ore.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
         self.spin_ore.setRange(-1000, 1000)
         self.spin_ore.setDecimals(2)
         self.spin_ore.setSuffix(" ore")

@@ -1,10 +1,10 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedWidget,
     QMessageBox, QDialog, QLineEdit, QFormLayout, QComboBox, 
-    QProgressBar, QScrollArea, QGridLayout, QDoubleSpinBox
+    QProgressBar, QScrollArea, QGridLayout, QDoubleSpinBox, QDateTimeEdit
 )
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QDateTime
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 from datetime import datetime
 
@@ -12,19 +12,33 @@ class AddAssenzaDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Aggiungi Assenza")
+        self.setFixedWidth(400)
         
         layout = QFormLayout(self)
+        layout.setSpacing(15)
         
         self.tipo_combo = QComboBox()
         for tipo in TipoAssenza:
             self.tipo_combo.addItem(tipo.value, userData=tipo)
+        self.tipo_combo.currentIndexChanged.connect(self.update_input_format)
+        self.tipo_combo.setStyleSheet("""
+            QComboBox { background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px; }
+            QComboBox QAbstractItemView { background-color: white; color: #0f172a; selection-background-color: #f1f5f9; }
+        """)
             
-        self.inizio_input = QLineEdit(datetime.now().strftime("%d/%m/%Y %H:%M"))
-        self.fine_input = QLineEdit(datetime.now().strftime("%d/%m/%Y %H:%M"))
+        self.inizio_input = QDateTimeEdit(QDateTime.currentDateTime())
+        self.fine_input = QDateTimeEdit(QDateTime.currentDateTime())
+        
+        # Impostazioni grafiche selettori
+        for widget in [self.inizio_input, self.fine_input]:
+            widget.setCalendarPopup(True)
+            widget.setStyleSheet("background-color: white; color: #0f172a; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px;")
         
         layout.addRow("Tipo:", self.tipo_combo)
-        layout.addRow("Data Inizio (GG/MM/AAAA HH:MM):", self.inizio_input)
-        layout.addRow("Data Fine (GG/MM/AAAA HH:MM):", self.fine_input)
+        self.lbl_inizio = QLabel("Data Inizio:")
+        self.lbl_fine = QLabel("Data Fine:")
+        layout.addRow(self.lbl_inizio, self.inizio_input)
+        layout.addRow(self.lbl_fine, self.fine_input)
         
         btn_layout = QHBoxLayout()
         btn_salva = QPushButton("Aggiungi")
@@ -35,15 +49,33 @@ class AddAssenzaDialog(QDialog):
         btn_layout.addWidget(btn_annulla)
         
         layout.addRow(btn_layout)
+        self.update_input_format()
+        
+    def update_input_format(self):
+        tipo = self.tipo_combo.currentData()
+        if tipo == TipoAssenza.ROL:
+            fmt = "dd/MM/yyyy HH:mm"
+            self.lbl_inizio.setText("Inizio (Data e Ora):")
+            self.lbl_fine.setText("Fine (Data e Ora):")
+        else:
+            fmt = "dd/MM/yyyy"
+            self.lbl_inizio.setText("Giorno Inizio:")
+            self.lbl_fine.setText("Giorno Fine:")
+            
+        self.inizio_input.setDisplayFormat(fmt)
+        self.fine_input.setDisplayFormat(fmt)
         
     def get_data(self):
-        try:
-            tipo = self.tipo_combo.currentData()
-            dt_inizio = datetime.strptime(self.inizio_input.text(), "%d/%m/%Y %H:%M")
-            dt_fine = datetime.strptime(self.fine_input.text(), "%d/%m/%Y %H:%M")
-            return tipo, dt_inizio, dt_fine
-        except ValueError:
-            return None, None, None
+        tipo = self.tipo_combo.currentData()
+        dt_inizio = self.inizio_input.dateTime().toPyDateTime()
+        dt_fine = self.fine_input.dateTime().toPyDateTime()
+        
+        # Se è FERIE o CERTIFICATO, normalizziamo le ore per coprire l'intera giornata
+        if tipo != TipoAssenza.ROL:
+            dt_inizio = dt_inizio.replace(hour=0, minute=0, second=0)
+            dt_fine = dt_fine.replace(hour=23, minute=59, second=59)
+            
+        return tipo, dt_inizio, dt_fine
 
 class EditSaldiDialog(QDialog):
     def __init__(self, ferie_attuali, rol_attuali, parent=None):
@@ -54,11 +86,14 @@ class EditSaldiDialog(QDialog):
         layout = QFormLayout(self)
         
         self.spin_ferie = QDoubleSpinBox()
+        self.spin_rol = QDoubleSpinBox()
+        for spin in [self.spin_ferie, self.spin_rol]:
+            spin.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
+
         self.spin_ferie.setRange(-100, 365)
         self.spin_ferie.setValue(ferie_attuali)
         self.spin_ferie.setSuffix(" gg")
         
-        self.spin_rol = QDoubleSpinBox()
         self.spin_rol.setRange(-1000, 1000)
         self.spin_rol.setValue(rol_attuali)
         self.spin_rol.setSuffix(" ore")
@@ -643,6 +678,9 @@ class AssenzeView(QWidget):
                 success = self.interfaccia.sistema_dipendenti.aggiungi_assenza(
                     self.current_dip_id, tipo, str_inizio, str_fine
                 )
+                if success == "SOVRAPPOSIZIONE":
+                    QMessageBox.warning(self, "Attenzione", "Il dipendente ha già un'assenza registrata in questo periodo.")
+                    return
                 if success:
                     self.load_data(self.current_dip_id) # Ricarica i dati
                 else:

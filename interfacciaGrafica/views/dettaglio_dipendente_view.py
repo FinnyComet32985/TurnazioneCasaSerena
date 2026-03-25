@@ -20,6 +20,9 @@ class EditAnagraficaDialog(QDialog):
         self.input_nome = QLineEdit(nome_attuale)
         self.input_cognome = QLineEdit(cognome_attuale)
         
+        for inp in [self.input_nome, self.input_cognome]:
+            inp.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
+
         layout.addRow("Nome:", self.input_nome)
         layout.addRow("Cognome:", self.input_cognome)
         

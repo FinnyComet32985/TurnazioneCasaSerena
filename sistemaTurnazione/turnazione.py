@@ -556,6 +556,12 @@ class Turnazione:
         if tipo_fascia == TipoFascia.RIPOSO:
             esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=False, piano=None, jolly=False))
             return esito
+
+        # Controllo: Massimo 1 NOTTE per settimana (Avviso non bloccante)
+        if tipo_fascia == TipoFascia.NOTTE:
+            assegnazioni_sett = self.get_assegnazioni_dipendente(settimana_key, id_dipendente)
+            if any(f.tipo == TipoFascia.NOTTE for f, ass in assegnazioni_sett):
+                print(f"AVVISO: Il dipendente {dipendente_obj.nome} {dipendente_obj.cognome} ha già una notte assegnata in questa settimana.")
             
         # Controlli Configurazione Limiti Operatori
         if jolly:

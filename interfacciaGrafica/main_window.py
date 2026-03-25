@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QStackedWidget
 )
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor
 from PyQt6.QtCore import Qt, QSize
 
 # Importiamo le viste
@@ -101,15 +101,20 @@ class MainWindow(QMainWindow):
         self.main_content.addWidget(self.page_personale)
         self.main_content.addWidget(self.page_impostazioni)
 
-        # Di base partiamo dalla pagina 0 (Turni)
-        self.main_content.setCurrentIndex(0)
-
         main_layout.addWidget(self.sidebar)
         main_layout.addWidget(self.main_content)
+        
+        # Inizializza lo stato della navbar (icone e stili) attivando la prima pagina
+        self.switch_page(0)
         
     def switch_page(self, index):
         self.main_content.setCurrentIndex(index)
         
+        # Aggiornamento dinamico delle icone tramite Painter per feedback visivo
+        self.update_navbar_icon(self.btn_turni, "./interfacciaGrafica/assets/calendar.svg", index == 0)
+        self.update_navbar_icon(self.btn_personale, "./interfacciaGrafica/assets/people.svg", index == 1)
+        self.update_navbar_icon(self.btn_impostazioni, "./interfacciaGrafica/assets/settings.svg", index == 2)
+
         self.btn_turni.setObjectName("sidebar_btn_active" if index == 0 else "sidebar_btn")
         self.btn_personale.setObjectName("sidebar_btn_active" if index == 1 else "sidebar_btn")
         self.btn_impostazioni.setObjectName("sidebar_btn_active" if index == 2 else "sidebar_btn")
@@ -118,6 +123,21 @@ class MainWindow(QMainWindow):
             btn.style().unpolish(btn)
             btn.style().polish(btn)
         
+    def update_navbar_icon(self, button, icon_path, is_active):
+        """Ricolora l'icona del pulsante usando QPainter in base allo stato attivo/inattivo"""
+        color = QColor("#3b82f6") if is_active else QColor("#94a3b8")
+        pixmap = QPixmap(icon_path)
+        
+        if not pixmap.isNull():
+            painter = QPainter(pixmap)
+            # CompositionMode_SourceIn applica il colore solo dove l'immagine originale non è trasparente
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(pixmap.rect(), color)
+            painter.end()
+            
+            # Imposta l'icona ricolorata e scalata per l'alta risoluzione
+            button.setIcon(QIcon(pixmap.scaled(24, 24, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)))
+
     def apply_styles(self):
         self.setStyleSheet("""
             * {

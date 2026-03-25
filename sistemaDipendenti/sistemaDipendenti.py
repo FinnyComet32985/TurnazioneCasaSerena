@@ -86,6 +86,17 @@ class SistemaDipendenti:
         # Cerchiamo l'oggetto dipendente nella lista
         for dipendente in self.dipendenti:
             if dipendente.id_dipendente == id_dipendente:
+                # --- CONTROLLO SOVRAPPOSIZIONI ---
+                fmt = "%Y-%m-%d %H:%M:%S"
+                new_start = datetime.strptime(data_inizio, fmt)
+                new_end = datetime.strptime(data_fine, fmt)
+
+                for ass in dipendente.assenze_programmate:
+                    ex_start = datetime.strptime(ass.data_inizio, fmt)
+                    ex_end = datetime.strptime(ass.data_fine, fmt)
+                    if (new_start <= ex_end) and (new_end >= ex_start):
+                        return "SOVRAPPOSIZIONE"
+
                 # Salviamo nel DB
                 id_db = sistemaSalvataggio.save_assenza(id_dipendente, tipo_assenza.value, data_inizio, data_fine)
                 
@@ -101,10 +112,8 @@ class SistemaDipendenti:
                 delta = dt_fine - dt_inizio
                 
                 if tipo_assenza == TipoAssenza.FERIE:
-                    # Ferie calcolate in giorni. Se la differenza è < 24h ma copre un turno, conta come 1?
-                    # Semplificazione: usiamo i giorni arrotondati + frazioni
-                    giorni = delta.total_seconds() / 86400  # 86400 secondi in un giorno
-                    # Arrotondiamo a 0.5 o intero per pulizia, o lasciamo float puro
+                    # Calcolo giorni inclusivi: se inizio e fine sono lo stesso giorno, è 1 giorno di ferie.
+                    giorni = (dt_fine.date() - dt_inizio.date()).days + 1
                     dipendente.ferie_rimanenti = round(dipendente.ferie_rimanenti - giorni, 2)
                     
                 elif tipo_assenza == TipoAssenza.ROL:

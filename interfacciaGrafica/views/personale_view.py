@@ -22,6 +22,9 @@ class AddDipendenteDialog(QDialog):
         self.input_nome = QLineEdit()
         self.input_cognome = QLineEdit()
         
+        for inp in [self.input_nome, self.input_cognome]:
+            inp.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
+
         layout.addRow("Nome:", self.input_nome)
         layout.addRow("Cognome:", self.input_cognome)
         
@@ -58,6 +61,9 @@ class ModificaDatiDialog(QDialog):
         self.banca_ore_spin = QDoubleSpinBox()
         self.banca_ore_spin.setRange(-1000, 1000)
         self.banca_ore_spin.setValue(dipendente.banca_ore)
+
+        for spin in [self.ferie_spin, self.rol_spin, self.banca_ore_spin]:
+            spin.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
         
         layout.addRow("Ferie Rimanenti (giorni):", self.ferie_spin)
         layout.addRow("ROL Rimanenti (ore):", self.rol_spin)
@@ -244,10 +250,10 @@ class PersonaleView(QWidget):
     def showEvent(self, event):
         """Metodo chiamato automaticamente quando la pagina diventa visibile"""
         super().showEvent(event)
+        # Forza il ritorno alla lista principale ogni volta che la sezione viene aperta
+        self.main_stack.setCurrentIndex(0)
         self.aggiorna_tabella()
-        # Quando torniamo alla lista, aggiorniamo anche le statistiche
-        if self.main_stack.currentIndex() == 0:
-            self.aggiorna_statistiche()
+        self.aggiorna_statistiche()
 
     def aggiorna_statistiche(self):
         tot_dip, tot_ferie, tot_cert = self.interfaccia.sistema_dipendenti.get_statistiche_oggi()
