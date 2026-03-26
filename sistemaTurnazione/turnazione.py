@@ -552,6 +552,21 @@ class Turnazione:
         if dipendente_obj is None:
             raise ValueError("Dipendente non trovato a sistema.")
 
+        # Controllo conflitti nello stesso giorno (RIPOSO vs Turni lavorativi)
+        assegnazioni_sett = self.get_assegnazioni_dipendente(settimana_key, id_dipendente)
+        for f_esistente, _ in assegnazioni_sett:
+            if f_esistente.data_turno == data_turno:
+                if tipo_fascia == TipoFascia.RIPOSO:
+                    if f_esistente.tipo != TipoFascia.RIPOSO:
+                        raise ValueError(f"Impossibile assegnare RIPOSO: il dipendente ha già un turno di {f_esistente.tipo.value} in questa data.")
+                    else:
+                        raise ValueError("Il dipendente è già in RIPOSO in questa data.")
+                else: # Stiamo assegnando un turno lavorativo
+                    if f_esistente.tipo == TipoFascia.RIPOSO:
+                        raise ValueError("Impossibile assegnare il turno: il dipendente è già in RIPOSO in questa data. Rimuovere prima il riposo.")
+                    elif f_esistente.tipo == tipo_fascia:
+                        raise ValueError(f"Il dipendente è già assegnato a questa fascia oraria ({tipo_fascia.value}).")
+
         # Early return per i turni di RIPOSO per evitare check inutili
         if tipo_fascia == TipoFascia.RIPOSO:
             esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=False, piano=None, jolly=False))
@@ -559,7 +574,6 @@ class Turnazione:
 
         # Controllo: Massimo 1 NOTTE per settimana (Avviso non bloccante)
         if tipo_fascia == TipoFascia.NOTTE:
-            assegnazioni_sett = self.get_assegnazioni_dipendente(settimana_key, id_dipendente)
             if any(f.tipo == TipoFascia.NOTTE for f, ass in assegnazioni_sett):
                 print(f"AVVISO: Il dipendente {dipendente_obj.nome} {dipendente_obj.cognome} ha già una notte assegnata in questa settimana.")
             
