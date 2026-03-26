@@ -253,7 +253,7 @@ class DipendentePill(QFrame):
     deleteRequested = pyqtSignal(int) # id_dipendente
     editRequested = pyqtSignal(object) # assegnazione
 
-    def __init__(self, assegnazione, parent=None):
+    def __init__(self, assegnazione, data_turno, interfaccia, parent=None):
         super().__init__(parent)
         self.assegnazione = assegnazione
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -284,16 +284,24 @@ class DipendentePill(QFrame):
         lbl.setStyleSheet("font-size: 11px; color: #334155; background: transparent; border: none;")
         layout.addWidget(lbl)
         
-        self.setStyleSheet("""
-            QFrame {
-                background-color: white;
-                border: 1px solid #cbd5e1;
+        # Controllo se il dipendente è in assenza in questa data per colorare la pillola di rosso
+        is_absent = interfaccia.sistema_dipendenti.verifica_assenza(dipendente.id_dipendente, data_turno)
+        
+        if is_absent:
+            bg_pill, border_pill, bg_hover, border_hover = "#fee2e2", "#ef4444", "#fecaca", "#dc2626"
+        else:
+            bg_pill, border_pill, bg_hover, border_hover = "white", "#cbd5e1", "#f8fafc", "#94a3b8"
+
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {bg_pill};
+                border: 1px solid {border_pill};
                 border-radius: 6px;
-            }
-            QFrame:hover {
-                border: 1px solid #94a3b8;
-                background-color: #f8fafc;
-            }
+            }}
+            QFrame:hover {{
+                border: 1px solid {border_hover};
+                background-color: {bg_hover};
+            }}
         """)
 
     def show_context_menu(self, pos):
@@ -346,10 +354,12 @@ class ShiftCellWidget(QWidget):
     pillDeleteRequested = pyqtSignal(int, int, int) # row, col, id_dipendente
     pillEditRequested = pyqtSignal(int, int, object) # row, col, assegnazione
 
-    def __init__(self, row, col, stato, assegnazioni, parent=None):
+    def __init__(self, row, col, stato, assegnazioni, data_turno, interfaccia, parent=None):
         super().__init__(parent)
         self.row = row
         self.col = col
+        self.data_turno = data_turno
+        self.interfaccia = interfaccia
         
         # Layout a griglia (2 colonne) per i dipendenti
         self.layout = QGridLayout(self)
@@ -383,7 +393,7 @@ class ShiftCellWidget(QWidget):
             for i, ass in enumerate(assegnazioni):
                 r = i // 3 # 3 colonne
                 c = i % 3
-                pill = DipendentePill(ass)
+                pill = DipendentePill(ass, self.data_turno, self.interfaccia)
                 self.layout.addWidget(pill, r, c)
                 pill.deleteRequested.connect(lambda id_dipendente: self.pillDeleteRequested.emit(self.row, self.col, id_dipendente))
                 pill.editRequested.connect(lambda assegnazione: self.pillEditRequested.emit(self.row, self.col, assegnazione))
@@ -942,6 +952,16 @@ class TurniView(QWidget):
         
         self.aggiorna_tabella()
         
+    def showEvent(self, event):
+        """Ricarica i dati ogni volta che la vista viene visualizzata."""
+        super().showEvent(event)
+        self.aggiorna_tabella()
+
+    def vai_a_data(self, target_date: date):
+        """Sposta la visualizzazione alla settimana della data specificata."""
+        self.current_monday = target_date - timedelta(days=target_date.weekday())
+        self.aggiorna_tabella()
+
     def prev_week(self):
         self.current_monday -= timedelta(weeks=1)
         self.aggiorna_tabella()
@@ -1171,10 +1191,12 @@ class TurniView(QWidget):
             dip = self.interfaccia.sistema_dipendenti.get_dipendente(dip_id)
             if not dip: continue
 
-            ore_effettive = self.interfaccia.turnazione._get_ore_lavorate_settimana(dip_id, settimana_key)
-            delta = ore_effettive - self.interfaccia.turnazione.MAX_ORE
+            # Recuperiamo il dettaglio ore (lavorate, assenze, saldo)
+            ore_lav, ore_ass, delta = self.interfaccia.turnazione.get_dettaglio_ore_settimanale(
+                dip_id, settimana_key, self.interfaccia.sistema_dipendenti
+            )
 
-            summary_item = self.create_summary_item(dip, ore_effettive, delta, is_approved)
+            summary_item = self.create_summary_item(dip, ore_lav, ore_ass, delta, is_approved)
             self.summary_layout.addWidget(summary_item)
 
     def create_summary_card(self):
@@ -1247,7 +1269,7 @@ class TurniView(QWidget):
         
         return card
 
-    def create_summary_item(self, dip, ore, delta, is_approved):
+    def create_summary_item(self, dip, ore_lav, ore_ass, delta, is_approved):
         item = QWidget()
         item.setStyleSheet("background-color: transparent;")
         layout = QHBoxLayout(item)
@@ -1260,16 +1282,20 @@ class TurniView(QWidget):
         
         # Calcolo visualizzazione parziale (Ore / Max) e differenza
         max_ore = self.interfaccia.turnazione.MAX_ORE
-        diff = delta # delta è già (ore - max_ore)
-        text_ore = f"{ore:.2f} / {max_ore}h"
+        ore_totali = ore_lav + ore_ass
+        
+        # Testo principale: "38.00 / 38h" con eventuale delta (+2.0)
+        delta_str = f" ({delta:+.2f})" if delta != 0 else ""
+        text_ore = f"<b>{ore_totali:.2f}{delta_str}</b> / {max_ore}h"
+        
+        # Se ci sono assenze, mostriamo il dettaglio sotto: "(30.40L + 7.60A)"
+        if ore_ass > 0:
+            text_ore += f"<br/><span style='font-size: 10px; color: #64748b;'>{ore_lav:.2f}L + {ore_ass:.2f}A</span>"
         
         style_ore = "color: #334155;"
-        if diff < 0:
-            text_ore += f" ({diff:.2f})"
-        elif diff > 0:
-            text_ore += f" (+{diff:.2f})"
-            style_ore = "color: #ef4444; font-weight: bold;" # Rosso se eccede le 38h
-            
+        if delta > 0:
+            style_ore = "color: #ef4444; font-weight: bold;"
+
         lbl_ore = QLabel(text_ore)
         lbl_ore.setStyleSheet(style_ore)
         
@@ -1354,7 +1380,7 @@ class TurniView(QWidget):
                     stato = StatoFascia.VUOTA
 
                 # Utilizziamo il nuovo widget personalizzato
-                cell_widget = ShiftCellWidget(row, table_col, stato, assegnazioni, self.table)
+                cell_widget = ShiftCellWidget(row, table_col, stato, assegnazioni, dt_turno, self.interfaccia, self.table)
                 cell_widget.clicked.connect(self.on_cell_clicked)
                 cell_widget.pillDeleteRequested.connect(self.rimuovi_dipendente_da_turno)
                 cell_widget.pillEditRequested.connect(self.modifica_assegnazione_turno)
@@ -1477,6 +1503,28 @@ class TurniView(QWidget):
                 QMessageBox.critical(self, "Errore", "Si è verificato un errore durante la generazione.")
 
     def approva_settimana_ui(self):
+        # --- Controllo preventivo della copertura dei turni ---
+        limiti = self.interfaccia.turnazione.limiti_fascia
+        total_target = sum(limiti.get(tf, 0) * 7 for tf in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE])
+        
+        anno, settimana, _ = self.current_monday.isocalendar()
+        settimana_dict = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana))
+        
+        total_actual = 0
+        if settimana_dict:
+            for day_fasce in settimana_dict.values():
+                for tipo, fascia in day_fasce.items():
+                    if tipo in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE]:
+                        total_actual += len(fascia.assegnazioni)
+        
+        perc = (total_actual / total_target * 100) if total_target > 0 else 0
+        
+        if perc < 100:
+            QMessageBox.warning(self, "Approvazione Negata", 
+                                f"Impossibile approvare la settimana: la copertura dei turni è al {int(perc)}%.\n\n"
+                                "Assicurati di aver coperto tutti i posti vacanti secondo i limiti configurati prima di procedere.")
+            return
+
         reply = QMessageBox.question(self, "Approvazione Settimana", 
                                    "Con l'approvazione, i saldi ore verranno consolidati nella banca ore dei dipendenti e la settimana verrà bloccata.\n\nVuoi procedere?",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)

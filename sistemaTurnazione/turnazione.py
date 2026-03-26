@@ -223,14 +223,51 @@ class Turnazione:
                 ore_lavorate += self.ORE_TURNI.get(fascia.tipo.value, 0)
         return ore_lavorate
 
-    def calcola_saldo_ore_settimanale(self, id_dipendente: int, settimana_key: tuple[int, int]) -> float:
+    def get_dettaglio_ore_settimanale(self, id_dipendente: int, settimana_key: tuple[int, int], sistema_dipendenti: SistemaDipendenti) -> tuple[float, float, float]:
         """
-        Calcola il saldo ore di un dipendente per una data settimana (ore lavorate - 38).
-        Un risultato positivo indica ore da aggiungere alla banca ore.
-        Un risultato negativo indica ore da recuperare (sottrarre dalla banca ore).
+        Calcola il dettaglio ore di un dipendente per una settimana (ore_lav, ore_ass, saldo).
         """
         ore_lavorate = self._get_ore_lavorate_settimana(id_dipendente, settimana_key)
-        return ore_lavorate - self.MAX_ORE # MAX_ORE is 38
+        
+        # Calcoliamo le ore "coperte" dalle assenze nella stessa settimana
+        ore_assenze = 0
+        dip = sistema_dipendenti.get_dipendente(id_dipendente)
+        if dip:
+            primo_g = date.fromisocalendar(settimana_key[0], settimana_key[1], 1)
+            ultimo_g = primo_g + timedelta(days=6)
+            
+            fmt = "%Y-%m-%d %H:%M:%S"
+            for ass in dip.assenze_programmate:
+                d_start = datetime.strptime(ass.data_inizio, fmt).date()
+                d_end = datetime.strptime(ass.data_fine, fmt).date()
+                
+                # Intersezione tra l'assenza e la settimana corrente
+                inter_start = max(primo_g, d_start)
+                inter_end = min(ultimo_g, d_end)
+                
+                if inter_start <= inter_end:
+                    if ass.tipo == "ROL":
+                        # Per i ROL usiamo la differenza oraria effettiva
+                        dt_start = datetime.strptime(ass.data_inizio, fmt)
+                        dt_end = datetime.strptime(ass.data_fine, fmt)
+                        # Solo se l'intervallo è nella settimana (semplificato)
+                        ore_assenze += (dt_end - dt_start).total_seconds() / 3600
+                    else:
+                        # Per FERIE/CERTIFICATO contiamo 7.6 ore per ogni giorno lavorativo (Lun-Ven)
+                        # in modo che 5gg = 38h.
+                        curr = inter_start
+                        while curr <= inter_end:
+                            if curr.weekday() < 5: # Da Lunedì a Venerdì
+                                ore_assenze += 7.6
+                            curr += timedelta(days=1)
+        
+        totale_coperto = ore_lavorate + ore_assenze
+        saldo = round(totale_coperto - self.MAX_ORE, 2)
+        return round(ore_lavorate, 2), round(ore_assenze, 2), saldo
+
+    def calcola_saldo_ore_settimanale(self, id_dipendente: int, settimana_key: tuple[int, int], sistema_dipendenti: SistemaDipendenti) -> float:
+        _, _, saldo = self.get_dettaglio_ore_settimanale(id_dipendente, settimana_key, sistema_dipendenti)
+        return saldo
 
     def _check_media_ore_4_mesi(self, id_dipendente: int, data_riferimento: date, nome_dipendente: str = "") -> bool:
         """
@@ -807,8 +844,10 @@ class Turnazione:
 
         # 1. Aggiornamento Banca Ore
         for id_dip in dipendenti_coinvolti:
-            saldo = self.calcola_saldo_ore_settimanale(id_dip, settimana_key)
-            sistema_dipendenti.aggiorna_banca_ore(id_dip, saldo)
+            saldo = self.calcola_saldo_ore_settimanale(id_dip, settimana_key, sistema_dipendenti)
+            key_settimana = f"SETT_{settimana_key[0]}_{settimana_key[1]}"
+            descrizione = f"Chiusura settimana {settimana_key[1]}/{settimana_key[0]}"
+            sistema_dipendenti.aggiungi_variazione_banca_ore(id_dip, saldo, key_settimana, descrizione)
             print(f"  -> Dipendente {id_dip}: Saldo {saldo:+.2f} ore applicato.")
 
         # 2. Aggiornamento Stato Turni (Lock)
@@ -845,12 +884,11 @@ class Turnazione:
 
         print(f"ROLLBACK Settimana {settimana_key}... Storno banca ore per {len(dipendenti_coinvolti)} dipendenti.")
 
-        # 1. Storno Banca Ore (Sottraiamo il saldo)
+        # 1. Storno Banca Ore (Rimozione record variazione)
         for id_dip in dipendenti_coinvolti:
-            saldo = self.calcola_saldo_ore_settimanale(id_dip, settimana_key)
-            # NOTA: Passiamo -saldo per annullare l'operazione precedente
-            sistema_dipendenti.aggiorna_banca_ore(id_dip, -saldo) 
-            print(f"  -> Dipendente {id_dip}: Storno di {-saldo:+.2f} ore applicato.")
+            key_settimana = f"SETT_{settimana_key[0]}_{settimana_key[1]}"
+            sistema_dipendenti.elimina_variazione_banca_ore(id_dip, key_settimana)
+            print(f"  -> Dipendente {id_dip}: Movimento {key_settimana} rimosso.")
 
         # 2. Sblocco Turni
         for fasce in settimana_dict.values():

@@ -102,6 +102,7 @@ class BadgeWidget(QWidget):
 
 class DettaglioDipendenteView(QWidget):
     back_requested = pyqtSignal()
+    navigazioneTurni = pyqtSignal(object) # Propaga la data verso PersonaleView
 
     def __init__(self, interfaccia):
         super().__init__()
@@ -297,6 +298,7 @@ class DettaglioDipendenteView(QWidget):
         self.tab_content = QStackedWidget()
         
         self.page_assenze = AssenzeView(self.interfaccia)
+        self.page_assenze.navigazioneTurni.connect(self.navigazioneTurni.emit)
         self.page_banca_ore = BancaOreView(self.interfaccia)
         
         self.tab_content.addWidget(self.page_assenze)

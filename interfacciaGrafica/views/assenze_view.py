@@ -1,12 +1,12 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedWidget,
     QMessageBox, QDialog, QLineEdit, QFormLayout, QComboBox, 
-    QProgressBar, QScrollArea, QGridLayout, QDoubleSpinBox, QDateTimeEdit
+    QProgressBar, QScrollArea, QGridLayout, QDoubleSpinBox, QDateTimeEdit, QFrame, QMenu
 )
-from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor
-from PyQt6.QtCore import Qt, QSize, QDateTime
+from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor, QAction
+from PyQt6.QtCore import Qt, QSize, QDateTime, pyqtSignal
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 class AddAssenzaDialog(QDialog):
     def __init__(self, parent=None):
@@ -114,7 +114,132 @@ class EditSaldiDialog(QDialog):
     def get_data(self):
         return self.spin_ferie.value(), self.spin_rol.value()
 
+class AssenzaCard(QFrame):
+    deleteRequested = pyqtSignal(object)
+    editRequested = pyqtSignal(object)
+
+    def __init__(self, assenza, parent=None):
+        super().__init__(parent)
+        self.assenza = assenza
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
+        self.setObjectName("assenza_card")
+        self.setStyleSheet("""
+            #assenza_card {
+                background-color: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+            }
+            #assenza_card:hover { border-color: #3b82f6; }
+            QLabel { color: #0f172a; background: transparent; }
+        """)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(15, 12, 15, 12)
+        
+        # Icona e Stile basato sul tipo
+        tipo_assenza = TipoAssenza(assenza.tipo)
+        config = {
+            TipoAssenza.FERIE: ("./interfacciaGrafica/assets/american-football.svg", "#f0fdf4", "#16a34a"),
+            TipoAssenza.ROL: ("./interfacciaGrafica/assets/time.svg", "#fefce8", "#ca8a04"),
+            TipoAssenza.CERTIFICATO: ("./interfacciaGrafica/assets/medkit.svg", "#fee2e2", "#dc2626")
+        }
+        icon_path, bg_color, icon_color = config.get(tipo_assenza)
+
+        icon_label = QLabel()
+        icon_label.setFixedSize(40, 40)
+        icon_label.setStyleSheet(f"background-color: {bg_color}; border-radius: 20px;")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        pixmap = QPixmap(icon_path)
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor(icon_color))
+        painter.end()
+        icon_label.setPixmap(pixmap.scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+
+        # Info Testuali
+        txt_layout = QVBoxLayout()
+        lbl_title = QLabel(f"<b>{tipo_assenza.value.upper()}</b>")
+        
+        fmt_in = "%Y-%m-%d %H:%M:%S"
+        dt_inizio = datetime.strptime(assenza.data_inizio, fmt_in)
+        dt_fine = datetime.strptime(assenza.data_fine, fmt_in)
+        
+        lbl_dates = QLabel(f"{dt_inizio.strftime('%d %b %Y')}  →  {dt_fine.strftime('%d %b %Y')}")
+        lbl_dates.setStyleSheet("font-size: 13px; color: #64748b;")
+        
+        txt_layout.addWidget(lbl_title)
+        txt_layout.addWidget(lbl_dates)
+
+        # Durata a destra
+        delta = dt_fine - dt_inizio
+        durata_str = f"{delta.days + 1} gg" if tipo_assenza != TipoAssenza.ROL else f"{delta.total_seconds()/3600:.1f} ore"
+        lbl_durata = QLabel(durata_str)
+        lbl_durata.setStyleSheet("font-weight: bold; color: #0f172a;")
+
+        layout.addWidget(icon_label)
+        layout.addLayout(txt_layout)
+        layout.addStretch()
+        layout.addWidget(lbl_durata)
+
+    def show_context_menu(self, pos):
+        # Impedisce la modifica o eliminazione se l'assenza è già conclusa
+        fmt_in = "%Y-%m-%d %H:%M:%S"
+        dt_fine = datetime.strptime(self.assenza.data_fine, fmt_in)
+        if dt_fine < datetime.now():
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Azione non consentita")
+            msg.setText("Impossibile modificare o eliminare un'assenza già conclusa.")
+            msg.setIcon(QMessageBox.Icon.Information)
+            # Forziamo i colori per garantire la leggibilità indipendentemente dal tema di sistema
+            msg.setStyleSheet("""
+                QMessageBox { background-color: white; }
+                QLabel { color: #0f172a; font-size: 14px; }
+                QPushButton { 
+                    background-color: #f1f5f9; 
+                    color: #0f172a; 
+                    border: 1px solid #cbd5e1; 
+                    padding: 6px 20px; 
+                    border-radius: 4px; 
+                }
+                QPushButton:hover { background-color: #e2e8f0; }
+            """)
+            msg.exec()
+            return
+
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px; }
+            QMenu::item { padding: 6px 24px; color: #334155; border-radius: 4px; }
+            QMenu::item:selected { background-color: #f1f5f9; color: #3b82f6; }
+        """)
+        
+        edit_act = QAction("Modifica Periodo", self)
+        edit_act.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/pencil.svg", "#3b82f6"))
+        delete_act = QAction("Elimina Assenza", self)
+        delete_act.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
+        
+        menu.addAction(edit_act)
+        menu.addSeparator()
+        menu.addAction(delete_act)
+        
+        action = menu.exec(self.mapToGlobal(pos))
+        if action == edit_act:
+            self.editRequested.emit(self.assenza)
+        elif action == delete_act:
+            self.deleteRequested.emit(self.assenza)
+
+    def get_colored_icon(self, path, color):
+        pix = QPixmap(path)
+        painter = QPainter(pix)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pix.rect(), QColor(color))
+        painter.end()
+        return QIcon(pix)
+
 class AssenzeView(QWidget):
+    navigazioneTurni = pyqtSignal(date)
+
     def __init__(self, interfaccia):
         super().__init__()
         self.interfaccia = interfaccia
@@ -530,6 +655,8 @@ class AssenzeView(QWidget):
             # Assenze Future: Ordinate dalla più vicina (reverse=False)
             for assenza in sorted(future, key=lambda a: a.data_inizio, reverse=False):
                 card = self.create_assenza_card(assenza)
+                card.deleteRequested.connect(self.cmd_delete_assenza)
+                card.editRequested.connect(self.cmd_edit_assenza)
                 self.lista_assenze_layout.addWidget(card)
 
             # Se ci sono assenze passate, mostra bottone toggle
@@ -569,101 +696,47 @@ class AssenzeView(QWidget):
             self.btn_toggle_past.setText("Nascondi assenze passate ▲")
 
     def create_assenza_card(self, assenza):
-        card = QWidget()
-        card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        card.setObjectName("assenza_card")
-        card.setStyleSheet("""
-            #assenza_card {
-                background-color: white;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-            }
-            QLabel {
-                color: #0f172a;
-                background-color: transparent;
-                border: none;
-            }
-        """)
-        layout = QHBoxLayout(card)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(15)
+        return AssenzaCard(assenza)
 
-        # Icona
-        icon_label = QLabel()
-        icon_label.setFixedSize(48, 48)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    def cmd_delete_assenza(self, assenza):
+        res = QMessageBox.question(self, "Elimina Assenza", 
+            f"Sei sicuro di voler eliminare questa registrazione di {assenza.tipo}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
-        tipo_assenza = TipoAssenza(assenza.tipo)
-        icon_path = ""
-        bg_color = ""
-        icon_color = ""
+        if res == QMessageBox.StandardButton.Yes:
+            # Nota: Assumiamo che esista il metodo nel backend o usiamo quello esistente
+            # Se non esiste, dovrai implementare la rimozione nel sistemaDipendenti
+            success = self.interfaccia.sistema_dipendenti.rimuovi_assenza(self.current_dip_id, assenza.id_assenza)
+            if success:
+                self.load_data(self.current_dip_id)
+            else:
+                QMessageBox.critical(self, "Errore", "Impossibile eliminare l'assenza.")
 
-        if tipo_assenza == TipoAssenza.FERIE:
-            icon_path = "./interfacciaGrafica/assets/american-football.svg"
-            bg_color = "#f0fdf4"  # Light Green
-            icon_color = "#16a34a" # Dark Green
-        elif tipo_assenza == TipoAssenza.ROL:
-            icon_path = "./interfacciaGrafica/assets/time.svg"
-            bg_color = "#fefce8"
-            icon_color = "#ca8a04"
-        elif tipo_assenza == TipoAssenza.CERTIFICATO:
-            icon_path = "./interfacciaGrafica/assets/medkit.svg"
-            bg_color = "#fee2e2"
-            icon_color = "#dc2626"
-
-        icon_label.setStyleSheet(f"background-color: {bg_color}; border-radius: 24px;")
+    def cmd_edit_assenza(self, assenza):
+        dialog = AddAssenzaDialog(self)
+        dialog.setWindowTitle("Modifica Assenza")
+        # Pre-popolamento (conversione date)
+        fmt = "%Y-%m-%d %H:%M:%S"
+        dialog.tipo_combo.setCurrentText(assenza.tipo)
+        dialog.inizio_input.setDateTime(QDateTime.fromString(assenza.data_inizio, Qt.DateFormat.ISODate))
+        dialog.fine_input.setDateTime(QDateTime.fromString(assenza.data_fine, Qt.DateFormat.ISODate))
         
-        # Ricolorazione SVG (se necessario)
-        pixmap = QPixmap(icon_path)
-        painter = QPainter(pixmap)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-        painter.fillRect(pixmap.rect(), QColor(icon_color))
-        painter.end()
-        
-        icon_label.setPixmap(pixmap.scaled(24, 24, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-
-        # Titolo (Accanto all'icona)
-        lbl_title = QLabel(f"<b>{tipo_assenza.value.upper()}</b>")
-        lbl_title.setStyleSheet("font-size: 16px; color: #0f172a;")
-
-        # Info (A destra)
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(2)
-        info_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        
-        fmt_in = "%Y-%m-%d %H:%M:%S"
-        fmt_out = "%d %b %Y"
-        dt_inizio = datetime.strptime(assenza.data_inizio, fmt_in)
-        dt_fine = datetime.strptime(assenza.data_fine, fmt_in)
-        
-        lbl_date = QLabel(f"{dt_inizio.strftime(fmt_out)}  →  {dt_fine.strftime(fmt_out)}")
-        lbl_date.setStyleSheet("font-size: 14px; color: #0f172a; font-weight: bold;")
-        lbl_date.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        # Calcolo durata
-        delta = dt_fine - dt_inizio
-        giorni = delta.days
-        ore = (delta.seconds / 3600) % 24
-        durata_str = ""
-        if giorni > 0:
-            durata_str += f"{giorni} giorni"
-        if ore > 0:
-            if durata_str: durata_str += " e "
-            durata_str += f"{int(ore)} ore"
-        
-        lbl_durata = QLabel(durata_str)
-        lbl_durata.setStyleSheet("color: #64748b;")
-        lbl_durata.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        info_layout.addWidget(lbl_date)
-        info_layout.addWidget(lbl_durata)
-
-        layout.addWidget(icon_label)
-        layout.addWidget(lbl_title)
-        layout.addStretch()
-        layout.addLayout(info_layout)
-
-        return card
+        if dialog.exec():
+            tipo, dt_inizio, dt_fine = dialog.get_data()
+            str_inizio = dt_inizio.strftime(fmt)
+            str_fine = dt_fine.strftime(fmt)
+            
+            # Rimuoviamo la vecchia e aggiungiamo la nuova per gestire correttamente i saldi
+            self.interfaccia.sistema_dipendenti.rimuovi_assenza(self.current_dip_id, assenza.id_assenza)
+            success = self.interfaccia.sistema_dipendenti.aggiungi_assenza(
+                self.current_dip_id, tipo, str_inizio, str_fine
+            )
+            
+            if success:
+                QMessageBox.information(self, "Successo", "Assenza modificata correttamente.")
+                self.load_data(self.current_dip_id)
+            else:
+                QMessageBox.critical(self, "Errore", "Errore durante la modifica.")
 
     def cmd_add_assenza(self):
         if not self.current_dip_id: return
@@ -682,7 +755,28 @@ class AssenzeView(QWidget):
                     QMessageBox.warning(self, "Attenzione", "Il dipendente ha già un'assenza registrata in questo periodo.")
                     return
                 if success:
-                    self.load_data(self.current_dip_id) # Ricarica i dati
+                    # Controllo se il dipendente era già presente in turnazione
+                    start_d = dt_inizio.date()
+                    end_d = dt_fine.date()
+                    conflict_date = None
+                    
+                    curr = start_d
+                    while curr <= end_d:
+                        anno, sett, _ = curr.isocalendar()
+                        assegnazioni = self.interfaccia.turnazione.get_assegnazioni_dipendente((anno, sett), self.current_dip_id)
+                        if any(f.data_turno == curr for f, ass in assegnazioni):
+                            conflict_date = curr
+                            break
+                        curr += timedelta(days=1)
+                    
+                    if conflict_date:
+                        res = QMessageBox.question(self, "Conflitto Turnazione", 
+                            f"Assenza aggiunta con successo. Tuttavia il dipendente era già presente in turnazione il {conflict_date.strftime('%d/%m/%Y')}.\n\nVuoi andare alla turnazione per modificarla ora?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                        if res == QMessageBox.StandardButton.Yes:
+                            self.navigazioneTurni.emit(conflict_date)
+                    
+                    self.load_data(self.current_dip_id)
                 else:
                     QMessageBox.critical(self, "Errore", "Impossibile aggiungere l'assenza.")
             else:

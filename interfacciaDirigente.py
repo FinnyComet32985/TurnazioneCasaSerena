@@ -37,7 +37,7 @@ class InterfacciaDirigente:
     def assumi_dipendente(self):
         nome = input("Nome: ")
         cognome = input("Cognome: ")
-        self.sistema_dipendenti.assumi_dipendente(nome, cognome)
+        self.sistema_dipendenti.assumi_dipendente(nome, cognome) # banca_ore removed
 
     def rimuovi_dipendente(self):
         id_input = input("id del dipendente da rimuovere: ")

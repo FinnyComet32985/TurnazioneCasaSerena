@@ -1,5 +1,6 @@
 from enum import Enum
 from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata
+from sistemaDipendenti.variazioneBancaOre import VariazioneBancaOre
 
 
 
@@ -15,7 +16,7 @@ class Dipendente:
     stato: StatoDipendente
     ferie_rimanenti: float
     rol_rimanenti: float
-    banca_ore: float
+    variazioni_banca_ore: list[VariazioneBancaOre]
     assenze_programmate: list[AssenzaProgrammata]
 
     def __init__(self, nome: str, cognome: str, stato: StatoDipendente = None, ferie_rimanenti: float = None, rol_rimanenti: float = None, banca_ore: float = None, assenze_programmate: list[AssenzaProgrammata] = None, id_dipendente: int = None):
@@ -34,10 +35,8 @@ class Dipendente:
             self.rol_rimanenti = rol_rimanenti
         else:
             self.rol_rimanenti = 0
-        if banca_ore is not None:
-            self.banca_ore = banca_ore
-        else:
-            self.banca_ore = 0
+        self.banca_ore = banca_ore if banca_ore is not None else 0
+        self.variazioni_banca_ore = []
         if assenze_programmate is not None:
             self.assenze_programmate = assenze_programmate
         else:

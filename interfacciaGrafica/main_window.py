@@ -101,6 +101,9 @@ class MainWindow(QMainWindow):
         self.main_content.addWidget(self.page_personale)
         self.main_content.addWidget(self.page_impostazioni)
 
+        # Collegamento per la navigazione automatica dalle assenze ai turni
+        self.page_personale.navigazioneTurni.connect(self.gestisci_navigazione_turni)
+
         main_layout.addWidget(self.sidebar)
         main_layout.addWidget(self.main_content)
         
@@ -123,6 +126,11 @@ class MainWindow(QMainWindow):
             btn.style().unpolish(btn)
             btn.style().polish(btn)
         
+    def gestisci_navigazione_turni(self, data_target):
+        """Cambia pagina e sposta la visualizzazione della turnazione alla data specificata."""
+        self.switch_page(0)  # Passa alla pagina Turnazione (indice 0)
+        self.page_turni.vai_a_data(data_target)
+
     def update_navbar_icon(self, button, icon_path, is_active):
         """Ricolora l'icona del pulsante usando QPainter in base allo stato attivo/inattivo"""
         color = QColor("#3b82f6") if is_active else QColor("#94a3b8")

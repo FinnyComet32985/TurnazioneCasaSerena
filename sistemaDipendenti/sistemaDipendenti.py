@@ -2,6 +2,7 @@ from datetime import datetime, date
 
 from sistemaDipendenti.assenzaProgrammata import AssenzaProgrammata, TipoAssenza
 from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
+from sistemaDipendenti.variazioneBancaOre import VariazioneBancaOre
 from sistemaSalvataggio import save_dipendente
 import sistemaSalvataggio
 
@@ -15,19 +16,21 @@ class SistemaDipendenti:
             self.dipendenti = []
 
 
-    def ripristina_dipendente(self, id_dipendente: int, nome: str, cognome: str, ferie_rimanenti: float, rol_rimanenti: float, banca_ore: float, stato_str: str):
+    def ripristina_dipendente(self, id_dipendente: int, nome: str, cognome: str, ferie_rimanenti: float, rol_rimanenti: float, banca_ore: float, stato_str: str, variazioni: list = None):
         """Crea un'istanza di dipendente da dati grezzi (DB) e la aggiunge alla lista senza salvare su DB."""
         stato = StatoDipendente(stato_str) if stato_str else StatoDipendente.ASSUNTO
         
         dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, banca_ore, [], id_dipendente)
+        if variazioni:
+            dipendente.variazioni_banca_ore = variazioni
         self.dipendenti.append(dipendente)
 
 
-    def assumi_dipendente(self, nome: str, cognome: str, stato: StatoDipendente = StatoDipendente.ASSUNTO, ferie_rimanenti: float = 0, rol_rimanenti : float = 0, banca_ore: float = 0):
+    def assumi_dipendente(self, nome: str, cognome: str, stato: StatoDipendente = StatoDipendente.ASSUNTO, ferie_rimanenti: float = 0, rol_rimanenti : float = 0):
         # Salva nel DB e ottieni l'ID generato
-        id_dip = save_dipendente(nome, cognome, stato.value, ferie_rimanenti, rol_rimanenti, banca_ore)
+        id_dip = save_dipendente(nome, cognome, stato.value, ferie_rimanenti, rol_rimanenti)
 
-        dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, banca_ore, [], id_dip)
+        dipendente = Dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti, 0, [], id_dip)
 
         self.dipendenti.append(dipendente)
 
@@ -136,19 +139,16 @@ class SistemaDipendenti:
         return []
 
     def modifica_dipendente(self, id_dipendente: int, nome: str, cognome: str, ferie: float, rol: float, banca_ore: float = None):
-        # Se banca_ore non è passato, recuperiamo quello attuale (per compatibilità chiamate vecchie)
         dip = self.get_dipendente(id_dipendente)
-        if banca_ore is None and dip:
-            banca_ore = dip.banca_ore
             
-        result = sistemaSalvataggio.update_dipendente(id_dipendente, nome, cognome, ferie, rol, banca_ore)
+        result = sistemaSalvataggio.update_dipendente(id_dipendente, nome, cognome, ferie, rol)
         if result:
             if dip:
                 dip.nome = nome
                 dip.cognome = cognome
                 dip.ferie_rimanenti = ferie
                 dip.rol_rimanenti = rol
-                dip.banca_ore = banca_ore
+                # Il saldo banca_ore non viene più aggiornato direttamente qui
             return True
         return False
         
@@ -181,29 +181,6 @@ class SistemaDipendenti:
                     dip.rol_rimanenti,
                     dip.banca_ore
                 )
-
-    def aggiorna_banca_ore(self, id_dipendente: int, delta_ore: float):
-        """
-        Aggiorna la banca ore di un dipendente aggiungendo (o sottraendo) un delta.
-        Salva immediatamente la modifica sul database.
-        """
-        dip = self.get_dipendente(id_dipendente)
-        if dip:
-            dip.banca_ore += delta_ore
-            # Arrotondiamo per evitare problemi di floating point
-            dip.banca_ore = round(dip.banca_ore, 2)
-            
-            # Salviamo la modifica completa del dipendente
-            self.modifica_dipendente(
-                dip.id_dipendente,
-                dip.nome,
-                dip.cognome,
-                dip.ferie_rimanenti,
-                dip.rol_rimanenti,
-                dip.banca_ore
-            )
-            return True
-        return False
 
     def verifica_assenza(self, id_dipendente: int, data_check: date) -> bool:
         """Restituisce True se il dipendente è in assenza (Ferie, Malattia, ecc.) nella data specificata."""
@@ -245,3 +222,60 @@ class SistemaDipendenti:
                             certificato += 1
         
         return totale, ferie, certificato
+    
+    def aggiungi_variazione_banca_ore(self, id_dipendente: int, delta_ore: float, key: str, descrizione: str = ""):
+        """ aggiunge la variazione e chiama la funzione per salvarla nel db """
+        dip = self.get_dipendente(id_dipendente)
+        if not dip:
+            return False
+
+        # Se la variazione è 0, è inutile salvarla nel DB o tenerla nello storico in memoria.
+        # Se esisteva già un record per questa settimana, lo rimuoviamo del tutto per pulizia.
+        if delta_ore == 0:
+            return self.elimina_variazione_banca_ore(id_dipendente, key)
+        
+        if sistemaSalvataggio.save_variazione_banca_ore(id_dipendente, key, delta_ore, descrizione):
+            # Aggiornamento in memoria
+            esiste = False
+            for var in dip.variazioni_banca_ore:
+                if var.key == key:
+                    old_val = var.valore
+                    var.valore = delta_ore
+                    var.descrizione = descrizione
+                    dip.banca_ore = round(dip.banca_ore - old_val + delta_ore, 2)
+                    esiste = True
+                    break
+            
+            if not esiste:
+                nuova_var = VariazioneBancaOre(key, delta_ore, descrizione)
+                dip.variazioni_banca_ore.append(nuova_var)
+                dip.banca_ore = round(dip.banca_ore + delta_ore, 2)
+            return True
+        return False
+
+    def elimina_variazione_banca_ore(self, id_dipendente: int, key: str):
+        """ rimuove la variazione dal db e aggiorna lo stato in memoria """
+        dip = self.get_dipendente(id_dipendente)
+        if not dip:
+            return False
+        
+        if sistemaSalvataggio.delete_variazione_banca_ore(id_dipendente, key):
+            for i, var in enumerate(dip.variazioni_banca_ore):
+                if var.key == key:
+                    dip.banca_ore = round(dip.banca_ore - var.valore, 2)
+                    dip.variazioni_banca_ore.pop(i)
+                    break
+            return True
+        return False
+
+    def get_movimenti_banca_ore(self, id_dipendente: int):
+        """ recupera i movimenti dal database e restituisce oggetti VariazioneBancaOre """
+        rows = sistemaSalvataggio.get_variazioni_banca_ore(id_dipendente)
+        movimenti = []
+        for row in rows:
+            # row[0] = key, row[1] = valore, row[2] = descrizione
+            movimenti.append(VariazioneBancaOre(row[0], row[1], row[2]))
+        
+        # Ordiniamo per inserimento decrescente (le più recenti in alto)
+        movimenti.reverse()
+        return movimenti

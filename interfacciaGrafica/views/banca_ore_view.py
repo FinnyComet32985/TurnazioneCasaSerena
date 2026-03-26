@@ -1,9 +1,10 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QMessageBox,
-    QGridLayout, QDialog, QDoubleSpinBox, QFormLayout
+    QGridLayout, QDialog, QDoubleSpinBox, QFormLayout, QLineEdit
 )
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor
 from PyQt6.QtCore import Qt, QSize
+from datetime import datetime, date, timedelta
 import random # Per simulare i dati storici
 
 class RegolaBancaOreDialog(QDialog):
@@ -25,7 +26,12 @@ class RegolaBancaOreDialog(QDialog):
         self.spin_ore.setSuffix(" ore")
         self.spin_ore.setValue(saldo_attuale)
         
+        self.input_motivo = QLineEdit()
+        self.input_motivo.setPlaceholderText("Es: Pagamento ore, Straordinari extra...")
+        self.input_motivo.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
+
         layout.addRow("Nuovo Saldo:", self.spin_ore)
+        layout.addRow("Motivazione:", self.input_motivo)
         
         btn_layout = QHBoxLayout()
         btn_salva = QPushButton("Applica")
@@ -38,7 +44,7 @@ class RegolaBancaOreDialog(QDialog):
         layout.addRow(btn_layout)
     
     def get_data(self):
-        return self.spin_ore.value()
+        return self.spin_ore.value(), self.input_motivo.text().strip()
 
 class BancaOreView(QWidget):
     def __init__(self, interfaccia):
@@ -274,7 +280,7 @@ class BancaOreView(QWidget):
 
         return info_card
 
-    def create_transaction_card(self, data, descrizione, ore, positivo):
+    def create_transaction_card(self, key, descrizione, ore, positivo):
         card = QWidget()
         card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         card.setObjectName("trans_card")
@@ -288,6 +294,25 @@ class BancaOreView(QWidget):
         layout = QHBoxLayout(card)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(15)
+
+        is_manual = key.startswith("DIR_")
+        display_title = descrizione
+        display_subtitle = ""
+        
+        if is_manual:
+            display_title = "Regolazione Manuale"
+            display_subtitle = descrizione
+        elif key.startswith("SETT_"):
+            # Parsa la key SETT_2025_2 per ottenere le date
+            try:
+                parti = key.split("_")
+                y, w = int(parti[1]), int(parti[2])
+                d1 = date.fromisocalendar(y, w, 1)
+                d2 = d1 + timedelta(days=6)
+                mesi = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
+                display_title = f"{d1.day} {mesi[d1.month-1]} - {d2.day} {mesi[d2.month-1]} {d2.year}"
+            except:
+                pass
 
         # Configurazione Stile in base al segno
         if positivo:
@@ -320,15 +345,18 @@ class BancaOreView(QWidget):
         # Dettagli
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
+        if not is_manual:
+            info_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        lbl_desc = QLabel(descrizione)
+        lbl_desc = QLabel(display_title)
         lbl_desc.setStyleSheet("color: #0f172a; font-weight: bold; font-size: 14px;")
         
-        lbl_data = QLabel(data)
-        lbl_data.setStyleSheet("color: #64748b; font-size: 12px;")
-        
         info_layout.addWidget(lbl_desc)
-        info_layout.addWidget(lbl_data)
+        
+        if display_subtitle:
+            lbl_sub = QLabel(display_subtitle)
+            lbl_sub.setStyleSheet("color: #64748b; font-size: 12px;")
+            info_layout.addWidget(lbl_sub)
 
         # Valore Ore
         lbl_valore = QLabel(f"{segno} {abs(ore)}h")
@@ -354,27 +382,23 @@ class BancaOreView(QWidget):
 
         self.lbl_saldo.setText(f"{dip.banca_ore:+.2f}")
 
-        # --- Mock Storico (Simulazione) ---
-        # Poiché il backend non ha una tabella storico, generiamo dati fittizi
-        # coerenti con il saldo attuale per mostrare la grafica.
+        # --- Caricamento Storico Reale ---
         while self.lista_movimenti_layout.count():
             child = self.lista_movimenti_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
 
-        # Genera 3-5 movimenti finti
-        if dip.banca_ore == 0:
-             self.lista_movimenti_layout.addWidget(QLabel("Nessun movimento recente."))
+        movimenti = self.interfaccia.sistema_dipendenti.get_movimenti_banca_ore(id_dipendente)
+        
+        if not movimenti:
+            lbl_empty = QLabel("Nessun movimento registrato.")
+            lbl_empty.setStyleSheet("color: #94a3b8; font-style: italic; margin-top: 10px;")
+            lbl_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.lista_movimenti_layout.addWidget(lbl_empty)
         else:
-            # Esempio dati
-            movimenti = [
-                ("12/01/2025", "Straordinario Turno Notte", 4.0, True),
-                ("15/01/2025", "Recupero Permesso", -2.0, False),
-                ("20/01/2025", "Approvazione Settimana 3", 1.5, True)
-            ]
-            
-            for data, desc, ore, positivo in movimenti:
-                card = self.create_transaction_card(data, desc, ore, positivo)
+            for mov in movimenti:
+                is_positivo = mov.valore >= 0
+                card = self.create_transaction_card(mov.key, mov.descrizione, mov.valore, is_positivo)
                 self.lista_movimenti_layout.addWidget(card)
 
     def cmd_regola_saldo(self):
@@ -386,13 +410,16 @@ class BancaOreView(QWidget):
 
         dialog = RegolaBancaOreDialog(dip.banca_ore, self)
         if dialog.exec():
-            nuovo_saldo = dialog.get_data()
+            nuovo_saldo, motivo = dialog.get_data()
             # Calcoliamo il delta (Nuovo - Vecchio) per il backend
             delta_ore = nuovo_saldo - dip.banca_ore
             
             if delta_ore != 0:
-                # Usa la funzione backend esistente per aggiornare tramite delta
-                success = self.interfaccia.sistema_dipendenti.aggiorna_banca_ore(self.current_dip_id, delta_ore)
+                # Usiamo DIR_ + timestamp per garantire univocità della chiave
+                key = f"DIR_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                descrizione = motivo if motivo else "Rettifica manuale del dirigente"
+                
+                success = self.interfaccia.sistema_dipendenti.aggiungi_variazione_banca_ore(self.current_dip_id, delta_ore, key, descrizione)
                 if success:
                     self.load_data(self.current_dip_id)
                 else:

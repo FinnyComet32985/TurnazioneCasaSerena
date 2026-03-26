@@ -2,6 +2,7 @@ import re
 import sqlite3
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaTurnazione.turnazione import Turnazione
+from sistemaDipendenti.variazioneBancaOre import VariazioneBancaOre
 
 def load_dipendenti() -> SistemaDipendenti:
     connection = sqlite3.connect('./db/turnazione.db')
@@ -16,19 +17,28 @@ def load_dipendenti() -> SistemaDipendenti:
     sistema = SistemaDipendenti()
 
     for dipendente_row in dipendenti_rows:
-        # riga è una tupla: (id, nome, cognome, ferie, rol, bancaOre, stato)
-        # Nota: l'ordine dipende da come è stato creato il DB.
-        # Assumiamo che bancaOre sia stato aggiunto dopo rolRimanenti o gestiamo l'indice dinamicamente.
-        # Per sicurezza in questa fase, usiamo l'indice in base alla query "select *". 
-        # Se il DB è vecchio (senza bancaOre), questa riga fallirà se non ricrei il DB.
+        # riga è una tupla: (id, nome, cognome, ferie, rol, stato)
+        id_dip = dipendente_row[0]
+
+        # Recuperiamo il saldo totale della banca ore sommando le variazioni dal nuovo database
+        cursor.execute("SELECT SUM(valore) FROM variazioneBancaOre WHERE idDipendente = ?", (id_dip,))
+        res_banca = cursor.fetchone()
+        banca_ore_totale = res_banca[0] if res_banca and res_banca[0] is not None else 0.0
+
+        # Recuperiamo le singole variazioni per popolare la lista in memoria e permettere storni corretti
+        cursor.execute("SELECT key, valore, descrizione FROM variazioneBancaOre WHERE idDipendente = ?", (id_dip,))
+        var_rows = cursor.fetchall()
+        variazioni = [VariazioneBancaOre(r[0], r[1], r[2]) for r in var_rows]
+
         sistema.ripristina_dipendente(
-            id_dipendente=dipendente_row[0], 
+            id_dipendente=id_dip, 
             nome=dipendente_row[1],
             cognome=dipendente_row[2], 
             ferie_rimanenti=dipendente_row[3], 
             rol_rimanenti=dipendente_row[4], 
-            banca_ore=dipendente_row[5],
-            stato_str=dipendente_row[6]
+            banca_ore=banca_ore_totale,
+            stato_str=dipendente_row[5],
+            variazioni=variazioni
         )
 
         # Carichiamo le assenze per questo dipendente

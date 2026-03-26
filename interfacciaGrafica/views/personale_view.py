@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QDoubleSpinBox
 )
 from PyQt6.QtGui import QPixmap, QIcon
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 from datetime import datetime
 
@@ -83,6 +83,8 @@ class ModificaDatiDialog(QDialog):
         return self.ferie_spin.value(), self.rol_spin.value(), self.banca_ore_spin.value()
 
 class PersonaleView(QWidget):
+    navigazioneTurni = pyqtSignal(object)
+
     def __init__(self, interfaccia):
         super().__init__()
         self.interfaccia = interfaccia
@@ -100,6 +102,7 @@ class PersonaleView(QWidget):
         # --- Pagina 1: Dettaglio Dipendente ---
         self.page_dettaglio = DettaglioDipendenteView(self.interfaccia)
         self.page_dettaglio.back_requested.connect(self.torna_alla_lista)
+        self.page_dettaglio.navigazioneTurni.connect(self.navigazioneTurni.emit)
         
         title = QLabel("Gestione Dipendenti")
         title.setObjectName("page_title")
