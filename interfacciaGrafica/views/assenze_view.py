@@ -32,7 +32,11 @@ class AddAssenzaDialog(QDialog):
         # Impostazioni grafiche selettori
         for widget in [self.inizio_input, self.fine_input]:
             widget.setCalendarPopup(True)
+            widget.setMinimumWidth(250)
             widget.setStyleSheet("background-color: white; color: #0f172a; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px;")
+            # Allarghiamo il popup del calendario per far sì che la domenica sia visibile e non tagliata
+            if widget.calendarWidget():
+                widget.calendarWidget().setMinimumWidth(300)
         
         layout.addRow("Tipo:", self.tipo_combo)
         self.lbl_inizio = QLabel("Data Inizio:")
