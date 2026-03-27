@@ -921,7 +921,7 @@ class TurniView(QWidget):
         btn_genera = QPushButton(" Genera Turni (A.I.)")
         btn_genera.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/sparkles.svg", "#ffffff"))
         btn_genera.setIconSize(QSize(20, 20))
-        btn_crea_zero = QPushButton(" Crea da zero (Svuota Tabella)")
+        btn_crea_zero = QPushButton(" Crea da zero")
         btn_crea_zero.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/document.svg", "#ffffff"))
         btn_crea_zero.setIconSize(QSize(20, 20))
         btn_genera.setFixedWidth(250)

@@ -14,7 +14,28 @@ class SistemaGenerazione:
         self.turnazione = turnazione
         self.sistema_dipendenti = sistema_dipendenti
 
-    def _sort_candidati_per_rotazione(self, candidati: List[Dipendente], tipo_fascia: TipoFascia, anno: int, settimana: int) -> List[Dipendente]:
+    def _is_festivo(self, d: date) -> bool:
+        """Riconosce le festività fisse e le vigilie per la rotazione."""
+        festivita = [
+            (1, 1), (1, 6), (4, 25), (5, 1), (6, 2), 
+            (8, 15), (11, 1), (12, 8), (12, 24), (12, 25), (12, 26), (12, 31)
+        ]
+        return (d.month, d.day) in festivita
+
+    def _get_date_collegate(self, d: date) -> List[date]:
+        """Ritorna le date 'opposte' per la rotazione delle feste (es: 25 e 26 dic)."""
+        coppie = [
+            ((12, 24), (12, 25)),
+            ((12, 25), (12, 26)),
+            ((12, 31), (1, 1))
+        ]
+        m, g = d.month, d.day
+        for c1, c2 in coppie:
+            if (m, g) == c1: return [d + timedelta(days=1)]
+            if (m, g) == c2: return [d - timedelta(days=1)]
+        return []
+
+    def _sort_candidati_per_rotazione(self, candidati: List[Dipendente], tipo_fascia: TipoFascia, anno: int, settimana: int, giorno_data: date) -> List[Dipendente]:
         """
         Ordina i candidati con un sistema a punteggio multiplo (Gerarchico):
         1. Recency: Chi non svolge questo turno da più tempo (data minore) ha la priorità.
@@ -23,6 +44,9 @@ class SistemaGenerazione:
         4. Banca Ore: Chi ha la banca ore più bassa (o negativa) ha la priorità per recuperare.
         """
         candidati_con_punteggio = []
+
+        is_holiday = self._is_festivo(giorno_data)
+        linked_dates = self._get_date_collegate(giorno_data)
         
         for dip in candidati:
             # 1. Recency specifica per questo tipo di fascia
@@ -68,13 +92,25 @@ class SistemaGenerazione:
             # 3. Carico Ore
             ore_settimana = self.turnazione._get_ore_lavorate_settimana(dip.id_dipendente, (anno, settimana))
 
+            # 4. Logica Festività (Rotazione Coppie)
+            holiday_penalty = 0
+            if is_holiday:
+                # Se è una festa, penalizziamo chi ha lavorato nella data collegata (es. Natale vs S.Stefano)
+                for d_link in linked_dates:
+                    a_l, s_l, _ = d_link.isocalendar()
+                    ass_link = self.turnazione.get_assegnazioni_dipendente((a_l, s_l), dip.id_dipendente)
+                    if any(f.data_turno == d_link and f.tipo != TipoFascia.RIPOSO for f, ass in ass_link):
+                        holiday_penalty += 50 # Penalità alta per favorire la rotazione
+
             # Ordinamento Gerarchico:
-            # 1. varieta_score (Priorità assoluta alla rotazione richiesta)
-            # 2. last_date (Chi non fa questo turno da più tempo)
-            # 3. ore_settimana (Meno ore lavorate)
-            # 4. banca_ore (Banca ore più bassa)
+            # 1. holiday_penalty (Rispetto delle feste a rotazione)
+            # 2. varieta_score (Priorità assoluta alla rotazione richiesta)
+            # 3. last_date (Chi non fa questo turno da più tempo)
+            # 4. ore_settimana (Meno ore lavorate)
+            # 5. banca_ore (Banca ore più bassa)
             candidati_con_punteggio.append((
                 dip, 
+                holiday_penalty,
                 varieta_score, 
                 last_date, 
                 ore_settimana, 
@@ -82,7 +118,7 @@ class SistemaGenerazione:
             ))
         
         random.shuffle(candidati_con_punteggio)
-        candidati_con_punteggio.sort(key=lambda x: (x[1], x[2], x[3], x[4]))
+        candidati_con_punteggio.sort(key=lambda x: (x[1], x[2], x[3], x[4], x[5]))
         
         return [item[0] for item in candidati_con_punteggio]
 
@@ -162,17 +198,26 @@ class SistemaGenerazione:
                     target_operatori = self.turnazione.limiti_fascia[tipo_fascia]
                     
                     # Controlliamo quanti ne abbiamo già (nel caso di rigenerazione parziale)
-                    fascia = self.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(giorno, {}).get(tipo_fascia)
-                    count_attuale = len(fascia.assegnazioni) if fascia else 0
+                    fascia_obj = self.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(giorno, {}).get(tipo_fascia)
+                    count_attuale = len(fascia_obj.assegnazioni) if fascia_obj else 0
+
+                    # Calcolo distribuzione piani per questo turno
+                    piani_sequenza = []
+                    for p, limit in sorted(self.turnazione.limiti_piano.items()):
+                        for _ in range(limit):
+                            piani_sequenza.append(p)
 
                     while count_attuale < target_operatori:
                         candidati = self.turnazione.get_candidati_disponibili(self.sistema_dipendenti, giorno, tipo_fascia)
-                        candidati_ordinati = self._sort_candidati_per_rotazione(candidati, tipo_fascia, anno, settimana)
+                        candidati_ordinati = self._sort_candidati_per_rotazione(candidati, tipo_fascia, anno, settimana, giorno)
                         
                         assigned = False
                         for cand in candidati_ordinati:
+                            # Determina il piano in base alla posizione (slot attuale)
+                            current_piano = piani_sequenza[count_attuale] if count_attuale < len(piani_sequenza) else 1
+                            
                             try:
-                                self.turnazione.assegna_turno(self.sistema_dipendenti, cand.id_dipendente, giorno, tipo_fascia, stato=StatoFascia.GENERATA)
+                                self.turnazione.assegna_turno(self.sistema_dipendenti, cand.id_dipendente, giorno, tipo_fascia, piano=current_piano, stato=StatoFascia.GENERATA)
                                 count_attuale += 1
                                 assigned = True
                                 break # Passa al prossimo slot vuoto

@@ -790,14 +790,10 @@ class Turnazione:
 
         for giorno in giorni_settimana:
             giorno_dict = settimana_dict.get(giorno)
-            if giorno_dict is None:
-                self.inizializza_giorno(giorno)
-                giorno_dict = settimana_dict.get(giorno)
-            
-            if TipoFascia.RIPOSO not in giorno_dict:
-                from sistemaTurnazione.fasciaOraria import FasciaOraria
-                fascia_riposo = FasciaOraria(giorno, TipoFascia.RIPOSO, 0, 0)
-                giorno_dict[TipoFascia.RIPOSO] = fascia_riposo
+            if giorno_dict is None or TipoFascia.RIPOSO not in giorno_dict:
+                # Usa add_turno per creare correttamente la fascia nel DB e in memoria
+                self.add_turno(giorno, TipoFascia.RIPOSO, StatoFascia.GENERATA)
+                giorno_dict = settimana_dict[giorno]
 
             for dip in tutti_dipendenti:
                 assegnazioni_settimana = self.get_assegnazioni_dipendente(settimana_key, dip.id_dipendente)
