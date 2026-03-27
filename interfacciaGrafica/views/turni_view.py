@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout,
-    QPushButton, QTableWidget, QTableWidgetItem, 
+    QPushButton, QTableWidget, QTableWidgetItem, QFileDialog,
     QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog, QCheckBox,
     QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter, QMenu
 )
@@ -12,6 +12,9 @@ from datetime import datetime, date, timedelta
 from sistemaTurnazione.fasciaOraria import TipoFascia, StatoFascia
 from sistemaDipendenti.dipendente import StatoDipendente
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
+
+# Import del modulo di esportazione
+from sistemaTurnazione.sistemaEsportazione import genera_pdf_settimanale
 
 class AssignTurnoDialog(QDialog):
     def __init__(self, dipendenti, dt_turno, tipo_fascia, parent=None, assegnazione_esistente=None):
@@ -265,8 +268,16 @@ class DipendentePill(QFrame):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         dipendente = assegnazione.dipendente
-        # Nome sintetico: Rossi M.
-        nome_str = f"<b>{dipendente.cognome} {dipendente.nome[0]}.</b>"
+
+        # Identifica se esistono altri dipendenti assunti con lo stesso cognome
+        dipendenti_attivi = [d for d in interfaccia.sistema_dipendenti.get_lista_dipendenti() if d.stato == StatoDipendente.ASSUNTO]
+        cognomi_attivi = [d.cognome for d in dipendenti_attivi]
+        if cognomi_attivi.count(dipendente.cognome) > 1:
+             nome_display = f"{dipendente.cognome} {dipendente.nome[0]}."
+        else:
+             nome_display = dipendente.cognome
+
+        nome_str = f"<b>{nome_display}</b>"
         
         # Indicatori: [P1] [J] [C]
         info_tags = []
@@ -684,6 +695,7 @@ class TurniView(QWidget):
         self.btn_approva.clicked.connect(self.approva_settimana_ui)
         self.btn_modifica.clicked.connect(self.riapri_settimana_ui)
         self.btn_svuota.clicked.connect(self.svuota_settimana_ui)
+        self.btn_pdf.clicked.connect(self.esporta_pdf)
 
         action_btn_layout.addWidget(self.btn_modifica)
         action_btn_layout.addWidget(self.btn_approva)
@@ -1496,7 +1508,8 @@ class TurniView(QWidget):
             from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
             generatore = SistemaGenerazione(self.interfaccia.turnazione, self.interfaccia.sistema_dipendenti)
             
-            if generatore.genera_turnazione_automatica(anno, settimana):
+            # Il flag genera_piani è impostato su False per ora. Impostare a True per abilitare i piani.
+            if generatore.genera_turnazione_automatica(anno, settimana, genera_piani=False):
                 QMessageBox.information(self, "Completato", "Turnazione generata con successo.")
                 self.aggiorna_tabella()
             else:
@@ -1562,6 +1575,34 @@ class TurniView(QWidget):
                 self.aggiorna_tabella()
             else:
                 QMessageBox.warning(self, "Errore", "Impossibile svuotare la settimana. Verifica che non sia già approvata.")
+
+    def esporta_pdf(self):
+        """Apre il dialogo di salvataggio e richiama la generazione del PDF."""
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Esporta Turnazione PDF", 
+            f"Turni_Settimana_{self.current_monday.strftime('%Y_%W')}.pdf", 
+            "PDF Files (*.pdf)"
+        )
+        
+        if not path:
+            return
+
+        try:
+            genera_pdf_settimanale(
+                path, 
+                self.current_monday, 
+                self.interfaccia.sistema_dipendenti, 
+                self.interfaccia.turnazione, 
+                self.fasce_disponibili
+            )
+            
+            res = QMessageBox.information(self, "PDF Generato", f"Il file è stato salvato con successo in:\n{path}", 
+                                          QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Ok)
+            if res == QMessageBox.StandardButton.Open:
+                import os
+                os.startfile(path)
+        except Exception as e:
+            QMessageBox.critical(self, "Errore Esportazione", f"Errore durante la creazione del PDF:\n{str(e)}")
 
     def get_colored_icon(self, icon_path, color_hex):
         """Ricolora un'icona SVG/PNG usando QPainter"""

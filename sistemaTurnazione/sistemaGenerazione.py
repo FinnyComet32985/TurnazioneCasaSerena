@@ -169,7 +169,7 @@ class SistemaGenerazione:
                 else:
                     best_ass.turnoBreve = False # Rollback in memoria
 
-    def genera_turnazione_automatica(self, anno: int, settimana: int) -> bool:
+    def genera_turnazione_automatica(self, anno: int, settimana: int, genera_piani: bool = False) -> bool:
         """
         Genera automaticamente i turni per la settimana specificata.
         Priorità: 1. Notti, 2. Turni Diurni (Mattina/Pomeriggio).
@@ -203,9 +203,10 @@ class SistemaGenerazione:
 
                     # Calcolo distribuzione piani per questo turno
                     piani_sequenza = []
-                    for p, limit in sorted(self.turnazione.limiti_piano.items()):
-                        for _ in range(limit):
-                            piani_sequenza.append(p)
+                    if genera_piani:
+                        for p, limit in sorted(self.turnazione.limiti_piano.items()):
+                            for _ in range(limit):
+                                piani_sequenza.append(p)
 
                     while count_attuale < target_operatori:
                         candidati = self.turnazione.get_candidati_disponibili(self.sistema_dipendenti, giorno, tipo_fascia)
@@ -213,8 +214,10 @@ class SistemaGenerazione:
                         
                         assigned = False
                         for cand in candidati_ordinati:
-                            # Determina il piano in base alla posizione (slot attuale)
-                            current_piano = piani_sequenza[count_attuale] if count_attuale < len(piani_sequenza) else 1
+                            # Determina il piano in base alla posizione (slot attuale) solo se abilitato
+                            current_piano = 0
+                            if genera_piani:
+                                current_piano = piani_sequenza[count_attuale] if count_attuale < len(piani_sequenza) else 1
                             
                             try:
                                 self.turnazione.assegna_turno(self.sistema_dipendenti, cand.id_dipendente, giorno, tipo_fascia, piano=current_piano, stato=StatoFascia.GENERATA)
