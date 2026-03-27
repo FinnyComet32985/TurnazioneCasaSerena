@@ -16,6 +16,7 @@ from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 
 # Import del modulo di esportazione
 from sistemaTurnazione.sistemaEsportazione import genera_pdf_settimanale
+from sistemaTurnazione.festivita_util import get_festivita_italiane
 
 class AssignTurnoDialog(QDialog):
     def __init__(self, dipendenti, dt_turno, tipo_fascia, parent=None, assegnazione_esistente=None):
@@ -236,7 +237,7 @@ class DayWidget(QWidget):
         if self.dt == date.today():
             self.bg_color = QColor("#eff6ff") # Blu chiarissimo
             lbl_num.setStyleSheet(lbl_num.styleSheet() + " color: #2563eb;")
-        elif (self.dt.month, self.dt.day) in self.holidays:
+        elif self.dt in self.holidays:
             self.bg_color = QColor("#fef2f2") # Rosso chiarissimo
         elif self.dt.weekday() >= 5: # Sabato o Domenica
             self.bg_color = QColor("#f8fafc") # Grigio chiarissimo
@@ -534,12 +535,7 @@ class TurniView(QWidget):
         # Inizializza alla data di oggi (lunedì della settimana corrente)
         today = date.today()
         self.current_monday = today - timedelta(days=today.weekday())
-        
-        # Lista di festività fisse (mese, giorno)
-        self.holidays = [
-            (1, 1), (1, 6), (4, 25), (5, 1), (6, 2), 
-            (8, 15), (11, 1), (12, 8), (12, 25), (12, 26)
-        ]
+        self.holidays = set()
         
         self.init_ui()
         
@@ -1343,6 +1339,13 @@ class TurniView(QWidget):
         return DayWidget(dt, self.holidays, self)
 
     def aggiorna_tabella(self):
+        # Calcola le festività per l'anno della settimana corrente
+        y1 = self.current_monday.year
+        y2 = (self.current_monday + timedelta(days=6)).year
+        self.holidays = get_festivita_italiane(y1)
+        if y1 != y2:
+            self.holidays.update(get_festivita_italiane(y2))
+
         self.update_header_ui()
         self.update_dashboard_data()
         

@@ -7,6 +7,7 @@ from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaTurnazione.fasciaOraria import TipoFascia, StatoFascia
 from sistemaTurnazione.turnazione import Turnazione
+from sistemaTurnazione.festivita_util import get_festivita_italiane, get_vigilie, calcola_pasqua
 
 class SistemaGenerazione:
     
@@ -16,11 +17,7 @@ class SistemaGenerazione:
 
     def _is_festivo(self, d: date) -> bool:
         """Riconosce le festività fisse e le vigilie per la rotazione."""
-        festivita = [
-            (1, 1), (1, 6), (4, 25), (5, 1), (6, 2), 
-            (8, 15), (11, 1), (12, 8), (12, 24), (12, 25), (12, 26), (12, 31)
-        ]
-        return (d.month, d.day) in festivita
+        return d in get_festivita_italiane(d.year) or d in get_vigilie(d.year)
 
     def _get_date_collegate(self, d: date) -> List[date]:
         """Ritorna le date 'opposte' per la rotazione delle feste (es: 25 e 26 dic)."""
@@ -29,6 +26,11 @@ class SistemaGenerazione:
             ((12, 25), (12, 26)),
             ((12, 31), (1, 1))
         ]
+        
+        pasqua = calcola_pasqua(d.year)
+        if d == pasqua: return [pasqua + timedelta(days=1)]
+        if d == pasqua + timedelta(days=1): return [pasqua]
+
         m, g = d.month, d.day
         for c1, c2 in coppie:
             if (m, g) == c1: return [d + timedelta(days=1)]
