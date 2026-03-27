@@ -195,11 +195,19 @@ class SistemaGenerazione:
             for giorno in giorni_settimana:
                 for tipo_fascia in fase:
                     
-                    target_operatori = self.turnazione.limiti_fascia[tipo_fascia]
-                    
+                    if tipo_fascia == TipoFascia.NOTTE:
+                        target_operatori = 1
+                    else:
+                        target_operatori = self.turnazione.limiti_fascia.get(tipo_fascia, 0)
+
                     # Controlliamo quanti ne abbiamo già (nel caso di rigenerazione parziale)
                     fascia_obj = self.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(giorno, {}).get(tipo_fascia)
                     count_attuale = len(fascia_obj.assegnazioni) if fascia_obj else 0
+                    
+                    # FIX NOTTE: Se è notte e c'è già un assegnato, saltiamo per evitare doppioni
+                    if tipo_fascia == TipoFascia.NOTTE and count_attuale >= 1:
+                        print(f"  - Notte del {giorno} già coperta, salto.")
+                        continue
 
                     # Calcolo distribuzione piani per questo turno
                     piani_sequenza = []
@@ -214,6 +222,11 @@ class SistemaGenerazione:
                         
                         assigned = False
                         for cand in candidati_ordinati:
+                            # ULTIMO CONTROLLO DI SICUREZZA: se nel frattempo (es. automazioni) 
+                            # la notte è stata coperta, usciamo subito.
+                            if tipo_fascia == TipoFascia.NOTTE and len(fascia_obj.assegnazioni) >= 1:
+                                break
+
                             # Determina il piano in base alla posizione (slot attuale) solo se abilitato
                             current_piano = 0
                             if genera_piani:

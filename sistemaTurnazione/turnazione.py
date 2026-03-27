@@ -562,12 +562,12 @@ class Turnazione:
             try:
                 self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dip, turno_breve=False, piano=0, jolly=False)
             except ValueError as e:
-                print(f"  - {dip.nome} escluso: {e}")
+                #print(f"  - {dip.nome} escluso: {e}")
                 continue # Viola le 11 ore
                 
             # 5. Filtro Riposo Settimanale (BLOCCANTE per garantire le 24h di riposo)
             if not self._check_riposo_settimanale(settimana_key, dip.id_dipendente, data_turno, tipo_fascia, turno_breve=False):
-                print(f"  - {dip.nome} escluso: violazione riposo settimanale 24h")
+                #print(f"  - {dip.nome} escluso: violazione riposo settimanale 24h")
                 # Bloccante per la generazione automatica per garantire il rispetto del vincolo
                 continue
 

@@ -2,7 +2,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout,
     QPushButton, QTableWidget, QTableWidgetItem, QFileDialog,
     QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog, QCheckBox,
-    QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter, QMenu
+    QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter, QMenu,
+    QProgressDialog, QApplication
 )
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import Qt, QSize, QDate, QRect, pyqtSignal
@@ -606,21 +607,6 @@ class TurniView(QWidget):
         btn_next.setStyleSheet("QPushButton { border: 1px solid #cbd5e1; border-radius: 20px; background-color: white; } QPushButton:hover { background-color: #f1f5f9; }")
         btn_next.clicked.connect(self.next_week)
         
-        # Bottone Genera (Spostato qui per comodità)
-        self.btn_genera_main = QPushButton(" Genera")
-        self.btn_genera_main.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/sparkles.svg", "#5b21b6"))
-        self.btn_genera_main.setIconSize(QSize(20, 20))
-        self.btn_genera_main.setFixedSize(110, 40)
-        self.btn_genera_main.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_genera_main.setStyleSheet("""
-            QPushButton {
-                background-color: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px;
-                color: #5b21b6; font-weight: bold;
-            }
-            QPushButton:hover { background-color: #ede9fe; }
-        """)
-        self.btn_genera_main.clicked.connect(self.genera_turni_auto)
-
         # Bottone Oggi
         self.btn_today = QPushButton(" Oggi")
         self.btn_today.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/calendar-number.svg", "#3b82f6")) # Blu
@@ -635,8 +621,6 @@ class TurniView(QWidget):
         header_layout.addWidget(btn_next)
         header_layout.addSpacing(10)
         header_layout.addWidget(self.btn_today)
-        header_layout.addSpacing(10)
-        header_layout.addWidget(self.btn_genera_main)
         
         header_layout.addStretch()
         layout.addLayout(header_layout)
@@ -658,6 +642,13 @@ class TurniView(QWidget):
             }
             QPushButton:hover { background-color: #dcfce7; border-color: #6ee7b7; }
         """
+        genera_style = """
+            QPushButton {
+                background-color: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px;
+                padding: 8px 16px; font-weight: bold; color: #5b21b6; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #ede9fe; }
+        """
         # Stile Arancione per Riapri Settimana
         reopen_style = """
             QPushButton {
@@ -673,6 +664,11 @@ class TurniView(QWidget):
             }
             QPushButton:hover { background-color: #fee2e2; border-color: #fca5a5; }
         """
+        self.btn_genera = QPushButton(" Genera")
+        self.btn_genera.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/sparkles.svg", "#5b21b6"))
+        self.btn_genera.setIconSize(QSize(20, 20))
+        self.btn_genera.setStyleSheet(genera_style)
+        
         self.btn_modifica = QPushButton(" Riapri Settimana")
         self.btn_modifica.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/lock-open.svg", "#c2410c"))
         self.btn_modifica.setIconSize(QSize(20, 20))
@@ -692,11 +688,13 @@ class TurniView(QWidget):
         self.btn_svuota.setStyleSheet(svuota_style)
         self.btn_pdf.setStyleSheet(btn_style_header)
 
+        self.btn_genera.clicked.connect(self.genera_turni_auto)
         self.btn_approva.clicked.connect(self.approva_settimana_ui)
         self.btn_modifica.clicked.connect(self.riapri_settimana_ui)
         self.btn_svuota.clicked.connect(self.svuota_settimana_ui)
         self.btn_pdf.clicked.connect(self.esporta_pdf)
 
+        action_btn_layout.addWidget(self.btn_genera)
         action_btn_layout.addWidget(self.btn_modifica)
         action_btn_layout.addWidget(self.btn_approva)
         action_btn_layout.addWidget(self.btn_svuota)
@@ -1031,11 +1029,13 @@ class TurniView(QWidget):
                 if is_approved: break
         
         if is_approved:
+            self.btn_genera.hide()
             self.btn_approva.hide()
             self.btn_svuota.hide()
             self.btn_modifica.show()
             self.btn_pdf.show()
         else:
+            self.btn_genera.show()
             self.btn_approva.show()
             self.btn_svuota.show()
             self.btn_modifica.hide()
@@ -1505,11 +1505,40 @@ class TurniView(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             anno, settimana, _ = self.current_monday.isocalendar()
+            
+            # Feedback visivo di caricamento
+            progress = QProgressDialog(self)
+            # Aggiungiamo dei ritorni a capo per dare respiro al testo senza la barra
+            progress.setLabelText("\nGenerazione automatica in corso... Attendere.\n")
+            progress.setWindowTitle("Elaborazione")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            
+            # Togliamo la barra di caricamento che rimaneva ferma
+            bar = progress.findChild(QProgressBar)
+            if bar:
+                bar.hide()
+
+            progress.setMinimumWidth(350)
+            progress.setMinimumDuration(0) # Appare istantaneamente
+            progress.setCancelButton(None)
+            
+            # Applichiamo uno stile forte al testo interno
+            progress.setStyleSheet("QLabel { color: #1e293b; font-weight: bold; font-size: 14px; qproperty-alignment: AlignCenter; }")
+
+            progress.show()
+            # Processiamo gli eventi due volte per essere sicuri che il sistema operativo disegni la finestra
+            QApplication.processEvents()
+            QApplication.processEvents()
+            
             from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
             generatore = SistemaGenerazione(self.interfaccia.turnazione, self.interfaccia.sistema_dipendenti)
             
             # Il flag genera_piani è impostato su False per ora. Impostare a True per abilitare i piani.
-            if generatore.genera_turnazione_automatica(anno, settimana, genera_piani=False):
+            esito = generatore.genera_turnazione_automatica(anno, settimana, genera_piani=False)
+            
+            progress.close()
+            
+            if esito:
                 QMessageBox.information(self, "Completato", "Turnazione generata con successo.")
                 self.aggiorna_tabella()
             else:
