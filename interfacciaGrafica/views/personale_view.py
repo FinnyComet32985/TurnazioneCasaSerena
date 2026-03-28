@@ -188,6 +188,7 @@ class PersonaleView(QWidget):
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(5, 150)
         self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
@@ -225,7 +226,7 @@ class PersonaleView(QWidget):
                 border-bottom: 2px solid #e2e8f0;
                 font-weight: bold;
                 color: #64748b;
-                text-align: left;
+                text-align: center;
                 font-size: 16px;
             }
         """)
@@ -321,13 +322,16 @@ class PersonaleView(QWidget):
                 
             self.table.insertRow(row)
             
-            item_nome = QTableWidgetItem(dip.nome)
-            item_nome.setData(Qt.ItemDataRole.UserRole, dip.id_dipendente)
-            self.table.setItem(row, 0, item_nome)
-            self.table.setItem(row, 1, QTableWidgetItem(dip.cognome))
-            self.table.setItem(row, 2, QTableWidgetItem(f"{dip.ferie_rimanenti:.2f}"))
-            self.table.setItem(row, 3, QTableWidgetItem(f"{dip.rol_rimanenti:.2f}"))
-            self.table.setItem(row, 4, QTableWidgetItem(f"{dip.banca_ore:.2f}"))
+            # Creazione degli item per le colonne testuali con allineamento centrato
+            testo_colonne = [dip.nome, dip.cognome, f"{dip.ferie_rimanenti:.2f}", 
+                             f"{dip.rol_rimanenti:.2f}", f"{dip.banca_ore:.2f}"]
+            
+            for col, testo in enumerate(testo_colonne):
+                item = QTableWidgetItem(testo)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if col == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, dip.id_dipendente)
+                self.table.setItem(row, col, item)
             
             # Badge Stato (opzionale: colorato)
             self.table.setItem(row, 5, QTableWidgetItem("")) # Item placeholder necessario per coerenza riga

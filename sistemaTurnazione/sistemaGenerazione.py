@@ -171,7 +171,7 @@ class SistemaGenerazione:
                 else:
                     best_ass.turnoBreve = False # Rollback in memoria
 
-    def genera_turnazione_automatica(self, anno: int, settimana: int, genera_piani: bool = False) -> bool:
+    def genera_turnazione_automatica(self, anno: int, settimana: int, genera_piani: bool = True) -> bool:
         """
         Genera automaticamente i turni per la settimana specificata.
         Priorità: 1. Notti, 2. Turni Diurni (Mattina/Pomeriggio).
@@ -196,46 +196,45 @@ class SistemaGenerazione:
         for fase in fasi_generazione:
             for giorno in giorni_settimana:
                 for tipo_fascia in fase:
+                    # Costruiamo gli "slot" basandoci sui limiti per piano/fascia configurati
+                    config_fascia = self.turnazione.limiti_piani_fascia.get(tipo_fascia, {})
+                    slots_obiettivi = [] # Lista di (piano, is_jolly)
                     
-                    if tipo_fascia == TipoFascia.NOTTE:
+                    for p in [0, 1, 2]:
+                        for _ in range(config_fascia.get(p, 0)):
+                            slots_obiettivi.append((p, False))
+                    
+                    for _ in range(config_fascia.get('jolly', 0)):
+                        slots_obiettivi.append((1, True)) # Jolly default su P1
+
+                    target_operatori = len(slots_obiettivi)
+                    if target_operatori == 0 and tipo_fascia == TipoFascia.NOTTE:
                         target_operatori = 1
-                    else:
-                        target_operatori = self.turnazione.limiti_fascia.get(tipo_fascia, 0)
+                        slots_obiettivi = [(0, False)]
 
                     # Controlliamo quanti ne abbiamo già (nel caso di rigenerazione parziale)
                     fascia_obj = self.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(giorno, {}).get(tipo_fascia)
                     count_attuale = len(fascia_obj.assegnazioni) if fascia_obj else 0
                     
-                    # FIX NOTTE: Se è notte e c'è già un assegnato, saltiamo per evitare doppioni
-                    if tipo_fascia == TipoFascia.NOTTE and count_attuale >= 1:
-                        print(f"  - Notte del {giorno} già coperta, salto.")
-                        continue
-
-                    # Calcolo distribuzione piani per questo turno
-                    piani_sequenza = []
-                    if genera_piani:
-                        for p, limit in sorted(self.turnazione.limiti_piano.items()):
-                            for _ in range(limit):
-                                piani_sequenza.append(p)
-
                     while count_attuale < target_operatori:
                         candidati = self.turnazione.get_candidati_disponibili(self.sistema_dipendenti, giorno, tipo_fascia)
                         candidati_ordinati = self._sort_candidati_per_rotazione(candidati, tipo_fascia, anno, settimana, giorno)
                         
                         assigned = False
-                        for cand in candidati_ordinati:
-                            # ULTIMO CONTROLLO DI SICUREZZA: se nel frattempo (es. automazioni) 
-                            # la notte è stata coperta, usciamo subito.
-                            if tipo_fascia == TipoFascia.NOTTE and len(fascia_obj.assegnazioni) >= 1:
-                                break
+                        # Recuperiamo la configurazione dello slot corrente
+                        piano_slot, is_jolly_slot = slots_obiettivi[count_attuale]
 
-                            # Determina il piano in base alla posizione (slot attuale) solo se abilitato
-                            current_piano = 0
-                            if genera_piani:
-                                current_piano = piani_sequenza[count_attuale] if count_attuale < len(piani_sequenza) else 1
-                            
+                        for cand in candidati_ordinati:
                             try:
-                                self.turnazione.assegna_turno(self.sistema_dipendenti, cand.id_dipendente, giorno, tipo_fascia, piano=current_piano, stato=StatoFascia.GENERATA)
+                                self.turnazione.assegna_turno(
+                                    self.sistema_dipendenti, 
+                                    cand.id_dipendente, 
+                                    giorno, 
+                                    tipo_fascia, 
+                                    piano=piano_slot if genera_piani else 0, 
+                                    jolly=is_jolly_slot if genera_piani else False,
+                                    stato=StatoFascia.GENERATA
+                                )
                                 count_attuale += 1
                                 assigned = True
                                 break # Passa al prossimo slot vuoto

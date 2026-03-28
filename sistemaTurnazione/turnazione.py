@@ -47,15 +47,15 @@ class Turnazione:
         
         # Configurazione Default (inizializzata in memoria per evitare query DB in loop)
         self.max_jolly_per_turno = 1
-        self.limiti_piano = {
-            1: 4, # Piano 1: max 3
-            2: 3, # Piano 2: max 3
-            3: 1  # Piano 3: max 1
-        }
         self.limiti_fascia = {
             TipoFascia.MATTINA: 7,
             TipoFascia.POMERIGGIO: 6,
             TipoFascia.NOTTE: 1
+        }
+        self.limiti_piani_fascia = {
+            TipoFascia.MATTINA: {0: 3, 1: 3, 2: 1, 'jolly': 0},
+            TipoFascia.POMERIGGIO: {0: 2, 1: 2, 2: 1, 'jolly': 1},
+            TipoFascia.NOTTE: {0: 1, 1: 0, 2: 0, 'jolly': 0, 'manual_limit': 2}
         }
 
     def load_configuration(self):
@@ -64,25 +64,27 @@ class Turnazione:
         val = sistemaSalvataggio.get_config('max_jolly')
         self.max_jolly_per_turno = int(val) if val else 1
         
-        # Piano
+        # Caricamento Limiti Granulari per Piano e Fascia
         val = sistemaSalvataggio.get_config('max_piano')
         self.max_dipendenti_per_piano = int(val) if val else 3
 
-        # Limiti Fascia
-        self.limiti_fascia = {}
-        # Default values
-        defaults = {
-            TipoFascia.MATTINA: 7,
-            TipoFascia.POMERIGGIO: 6,
-            TipoFascia.NOTTE: 1
-        }
-        
         for tf in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE]:
-            val = sistemaSalvataggio.get_config(f'limit_{tf.value}')
-            if val:
-                self.limiti_fascia[tf] = int(val)
-            else:
-                self.limiti_fascia[tf] = defaults.get(tf, 0)
+            # Caricamento chiavi standard e speciali
+            keys_to_load = [0, 1, 2, 'jolly']
+            if tf == TipoFascia.NOTTE: keys_to_load.append('manual_limit')
+
+            for p in keys_to_load:
+                if p == 'jolly': p_key = "J"
+                elif p == 'manual_limit': p_key = "M"
+                else: p_key = f"P{p}"
+                
+                key = f"limit_{tf.value}_{p_key}"
+                val = sistemaSalvataggio.get_config(key)
+                if val is not None:
+                    self.limiti_piani_fascia[tf][p] = int(val)
+            
+            # Calcola il totale per fascia (solo per generazione AI, escludendo i limiti manuali)
+            self.limiti_fascia[tf] = sum(v for k, v in self.limiti_piani_fascia[tf].items() if k != 'manual_limit')
     
     # loading dei turni del DB
     def ripristina_fascia(self, id_turno: int, data_str: str, tipo_fascia_str: str, stato_str: str):
@@ -535,6 +537,19 @@ class Turnazione:
             if dip.stato.value != "ASSUNTO":
                 continue
                 
+            # 2. Vincolo: Massimo 5 giorni consecutivi di lavoro
+            # Controlliamo i 5 giorni precedenti alla data del turno
+            consecutivi = 0
+            for i in range(1, 6):
+                d_prec = data_turno - timedelta(days=i)
+                a_p, s_p, _ = d_prec.isocalendar()
+                ass_prec = self.get_assegnazioni_dipendente((a_p, s_p), dip.id_dipendente)
+                if any(f.data_turno == d_prec and f.tipo != TipoFascia.RIPOSO for f, ass in ass_prec):
+                    consecutivi += 1
+                else: break
+            if consecutivi >= 5:
+                continue
+
             # 2. Filtro Assenze (Ferie/Malattia)
             if sistema_dipendenti.verifica_assenza(dip.id_dipendente, data_turno):
                 continue
@@ -620,11 +635,14 @@ class Turnazione:
             if jolly_count >= self.max_jolly_per_turno:
                 raise ValueError(f"Limite massimo di {self.max_jolly_per_turno} Jolly raggiunto per questo turno.")
 
-        if piano and stato != StatoFascia.GENERATA and not jolly:
-            # Recupera il limite specifico per il piano (usa il default caricato se non specificato in limiti_piano)
-            max_p = self.limiti_piano.get(piano, self.max_dipendenti_per_piano)
+        if piano is not None and not jolly and stato not in [StatoFascia.GENERATA, StatoFascia.APPROVATA]:
+            # Per la notte usiamo il limite manuale dedicato, per i diurni usiamo l'obiettivo di generazione
+            if tipo_fascia == TipoFascia.NOTTE:
+                max_p = self.limiti_piani_fascia[TipoFascia.NOTTE].get('manual_limit', 2)
+            else:
+                max_p = self.limiti_piani_fascia.get(tipo_fascia, {}).get(piano, 10)
             
-            # Conta quanti dipendenti sono su quel piano escludendo i Jolly
+            # Conta quanti dipendenti sono già su quel piano escludendo i Jolly e chi è in turno breve (se vogliamo permettere sovrapposizioni tecniche)
             piano_count = sum(1 for a in fascia.assegnazioni if getattr(a, 'piano', None) == piano and not getattr(a, 'jolly', False))
             
             if piano_count >= max_p:
@@ -917,6 +935,17 @@ class Turnazione:
     def set_config_max_piano(self, valore: int):
         self.max_dipendenti_per_piano = valore
         sistemaSalvataggio.save_config('max_piano', str(valore))
+        
+    def set_config_limite_piano_fascia(self, tipo_fascia: TipoFascia, piano: any, valore: int):
+        self.limiti_piani_fascia[tipo_fascia][piano] = valore
+        
+        if piano == 'jolly': p_key = "J"
+        elif piano == 'manual_limit': p_key = "M"
+        else: p_key = f"P{piano}"
+
+        sistemaSalvataggio.save_config(f"limit_{tipo_fascia.value}_{p_key}", str(valore))
+        # Aggiorna cache totale escludendo i limiti manuali dalla somma di generazione
+        self.limiti_fascia[tipo_fascia] = sum(v for k, v in self.limiti_piani_fascia[tipo_fascia].items() if k != 'manual_limit')
 
     def set_config_limite_fascia(self, tipo_fascia: TipoFascia, valore: int):
         self.limiti_fascia[tipo_fascia] = valore

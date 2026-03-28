@@ -25,7 +25,7 @@ class AssignTurnoDialog(QDialog):
         self.setWindowTitle(f"Assegna Turno - {dt_turno} ({tipo_fascia})" if not assegnazione_esistente else f"Modifica Turno - {dt_turno} ({tipo_fascia})")
         self.setFixedWidth(350)
         self.id_scelto = None
-        self.piano_scelto = 1
+        self.piano_scelto = 0
         self.jolly_scelto = False
         self.corto_scelto = False
         
@@ -65,7 +65,7 @@ class AssignTurnoDialog(QDialog):
         # Selezione Piano
         layout.addWidget(QLabel("<b>Piano di lavoro:</b>"))
         self.combo_piano = QComboBox()
-        self.combo_piano.addItems(["Piano 1", "Piano 2", "Piano 3"])
+        self.combo_piano.addItems(["Piano Terra", "Piano 1", "Piano 2"])
         self.combo_piano.setStyleSheet("color: #0f172a; background-color: white; border: 1px solid #cbd5e1; padding: 6px; border-radius: 4px;")
         layout.addWidget(self.combo_piano)
         
@@ -91,9 +91,11 @@ class AssignTurnoDialog(QDialog):
                 self.combo.setCurrentIndex(index)
                 self.combo.setEnabled(False) # Non si cambia il dipendente in modifica
             
-            p = getattr(self.assegnazione_esistente, 'piano', 1) or 1
-            # Assumiamo che la combo_piano abbia indici 0, 1, 2 per Piano 1, 2, 3
-            self.combo_piano.setCurrentIndex(p - 1 if 1 <= p <= 3 else 0)
+            p = getattr(self.assegnazione_esistente, 'piano', 0)
+            if p is None: p = 0
+            
+            # Indici 0, 1, 2 per Piano Terra, 1, 2
+            self.combo_piano.setCurrentIndex(p if 0 <= p <= 2 else 0)
             
             self.check_jolly.setChecked(getattr(self.assegnazione_esistente, 'jolly', False))
             self.check_corto.setChecked(getattr(self.assegnazione_esistente, 'turnoBreve', False))
@@ -123,7 +125,7 @@ class AssignTurnoDialog(QDialog):
         
     def accept(self):
         self.id_scelto = self.combo.currentData()
-        self.piano_scelto = self.combo_piano.currentIndex() + 1
+        self.piano_scelto = self.combo_piano.currentIndex()
         self.jolly_scelto = self.check_jolly.isChecked()
         self.corto_scelto = self.check_corto.isChecked()
         super().accept()
@@ -257,10 +259,12 @@ class DayWidget(QWidget):
 class DipendentePill(QFrame):
     deleteRequested = pyqtSignal(int) # id_dipendente
     editRequested = pyqtSignal(object) # assegnazione
+    highlightRequested = pyqtSignal(int) # id_dipendente
 
-    def __init__(self, assegnazione, data_turno, interfaccia, parent=None):
+    def __init__(self, assegnazione, data_turno, interfaccia, is_highlighted=False, parent=None):
         super().__init__(parent)
         self.assegnazione = assegnazione
+        self.is_highlighted = is_highlighted
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
         self.setFixedHeight(24)
@@ -283,8 +287,9 @@ class DipendentePill(QFrame):
         
         # Indicatori: [P1] [J] [C]
         info_tags = []
-        if getattr(assegnazione, 'piano', None):
-            info_tags.append(f"<span style='color: #2563eb;'>P{assegnazione.piano}</span>")
+        if getattr(assegnazione, 'piano', None) is not None:
+            p_label = "PT" if assegnazione.piano == 0 else f"P{assegnazione.piano}"
+            info_tags.append(f"<span style='color: #2563eb;'>{p_label}</span>")
         if getattr(assegnazione, 'jolly', False):
             info_tags.append("<span style='color: #7c3aed;'>J</span>")
         if getattr(assegnazione, 'turnoBreve', False):
@@ -302,13 +307,19 @@ class DipendentePill(QFrame):
         
         if is_absent:
             bg_pill, border_pill, bg_hover, border_hover = "#fee2e2", "#ef4444", "#fecaca", "#dc2626"
+            border_width = "1px"
+        elif is_highlighted:
+            # Blu acceso per l'evidenziazione
+            bg_pill, border_pill, bg_hover, border_hover = "#eff6ff", "#3b82f6", "#dbeafe", "#2563eb"
+            border_width = "2px"
         else:
             bg_pill, border_pill, bg_hover, border_hover = "white", "#cbd5e1", "#f8fafc", "#94a3b8"
+            border_width = "1px"
 
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {bg_pill};
-                border: 1px solid {border_pill};
+                border: {border_width} solid {border_pill};
                 border-radius: 6px;
             }}
             QFrame:hover {{
@@ -338,14 +349,22 @@ class DipendentePill(QFrame):
             }
         """)
         
+        highlight_text = "Rimuovi Evidenzia" if self.is_highlighted else "Evidenzia Turni"
+        highlight_icon = "./interfacciaGrafica/assets/eye-off.svg" if self.is_highlighted else "./interfacciaGrafica/assets/eye.svg"
+        highlight_action = menu.addAction(highlight_text)
+        highlight_action.setIcon(self.get_colored_icon(highlight_icon, "#3b82f6"))
+        
         edit_action = menu.addAction("Modifica")
-        edit_action.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/pencil.svg", "#3b82f6"))
+        edit_action.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/pencil.svg", "#000000"))
+        
         delete_action = menu.addAction("Elimina")
         delete_action.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
         
         action = menu.exec(self.mapToGlobal(pos))
         if action == edit_action:
             self.editRequested.emit(self.assegnazione)
+        elif action == highlight_action:
+            self.highlightRequested.emit(self.assegnazione.dipendente.id_dipendente)
         elif action == delete_action:
             self.deleteRequested.emit(self.assegnazione.dipendente.id_dipendente)
 
@@ -366,8 +385,9 @@ class ShiftCellWidget(QWidget):
     clicked = pyqtSignal(int, int) # Segnale personalizzato per il click
     pillDeleteRequested = pyqtSignal(int, int, int) # row, col, id_dipendente
     pillEditRequested = pyqtSignal(int, int, object) # row, col, assegnazione
+    pillHighlightRequested = pyqtSignal(int, int, int) # row, col, id_dipendente
 
-    def __init__(self, row, col, stato, assegnazioni, data_turno, interfaccia, parent=None):
+    def __init__(self, row, col, stato, assegnazioni, data_turno, interfaccia, highlighted_id=None, parent=None):
         super().__init__(parent)
         self.row = row
         self.col = col
@@ -406,10 +426,12 @@ class ShiftCellWidget(QWidget):
             for i, ass in enumerate(assegnazioni):
                 r = i // 3 # 3 colonne
                 c = i % 3
-                pill = DipendentePill(ass, self.data_turno, self.interfaccia)
+                is_highlighted = (highlighted_id == ass.dipendente.id_dipendente)
+                pill = DipendentePill(ass, self.data_turno, self.interfaccia, is_highlighted=is_highlighted)
                 self.layout.addWidget(pill, r, c)
                 pill.deleteRequested.connect(lambda id_dipendente: self.pillDeleteRequested.emit(self.row, self.col, id_dipendente))
                 pill.editRequested.connect(lambda assegnazione: self.pillEditRequested.emit(self.row, self.col, assegnazione))
+                pill.highlightRequested.connect(lambda id_dipendente: self.pillHighlightRequested.emit(self.row, self.col, id_dipendente))
                 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -531,6 +553,7 @@ class TurniView(QWidget):
         super().__init__()
         self.interfaccia = interfaccia
         self.fasce_disponibili = [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE, TipoFascia.RIPOSO]
+        self.highlighted_dip_id = None # ID del dipendente da evidenziare
         
         # Inizializza alla data di oggi (lunedì della settimana corrente)
         today = date.today()
@@ -1395,11 +1418,20 @@ class TurniView(QWidget):
                     stato = StatoFascia.VUOTA
 
                 # Utilizziamo il nuovo widget personalizzato
-                cell_widget = ShiftCellWidget(row, table_col, stato, assegnazioni, dt_turno, self.interfaccia, self.table)
+                cell_widget = ShiftCellWidget(row, table_col, stato, assegnazioni, dt_turno, self.interfaccia, highlighted_id=self.highlighted_dip_id, parent=self.table)
                 cell_widget.clicked.connect(self.on_cell_clicked)
                 cell_widget.pillDeleteRequested.connect(self.rimuovi_dipendente_da_turno)
                 cell_widget.pillEditRequested.connect(self.modifica_assegnazione_turno)
+                cell_widget.pillHighlightRequested.connect(self.toggle_highlight)
                 self.table.setCellWidget(row, table_col, cell_widget)
+
+    def toggle_highlight(self, row, col, id_dipendente):
+        """Attiva o disattiva l'evidenziazione per un dipendente specifico."""
+        if self.highlighted_dip_id == id_dipendente:
+            self.highlighted_dip_id = None
+        else:
+            self.highlighted_dip_id = id_dipendente
+        self.aggiorna_tabella()
 
     def rimuovi_dipendente_da_turno(self, row, col, id_dipendente):
         tipo_fascia = self.fasce_disponibili[col - 1]
@@ -1536,8 +1568,7 @@ class TurniView(QWidget):
             from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
             generatore = SistemaGenerazione(self.interfaccia.turnazione, self.interfaccia.sistema_dipendenti)
             
-            # Il flag genera_piani è impostato su False per ora. Impostare a True per abilitare i piani.
-            esito = generatore.genera_turnazione_automatica(anno, settimana, genera_piani=False)
+            esito = generatore.genera_turnazione_automatica(anno, settimana, genera_piani=True)
             
             progress.close()
             

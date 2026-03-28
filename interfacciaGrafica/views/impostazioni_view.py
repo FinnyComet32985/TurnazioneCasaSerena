@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
-    QPushButton, QFormLayout, QScrollArea, QMessageBox, QFrame
+    QPushButton, QFormLayout, QScrollArea, QMessageBox, QFrame, QGridLayout
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon
@@ -67,35 +67,81 @@ class ImpostazioniView(QWidget):
         container = QWidget()
         container.setStyleSheet("background: transparent;")
         container_layout = QVBoxLayout(container)
-        container_layout.setSpacing(30)
+        container_layout.setSpacing(20)
         container_layout.setContentsMargins(0, 0, 20, 0)
 
-        # --- SEZIONE 1: LIMITI OPERATORI PER FASCIA ---
-        fascia_card = self.create_setting_card("Personale per Turno", "Specifica quanti dipendenti devono essere presenti in ogni fascia oraria.")
-        fascia_form = QFormLayout()
-        fascia_form.setSpacing(15)
-        fascia_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        # --- CARD 1: PIANO DI GENERAZIONE AUTOMATICA ---
+        gen_card = self.create_setting_card("Obiettivi Generazione (I.A.)", "Specifica quanti dipendenti l'algoritmo deve inserire per ogni piano. Per i turni diurni, questi valori fungono anche da limite per l'inserimento manuale.")
+        gen_grid = QGridLayout()
+        gen_grid.setSpacing(30)
+        gen_grid.setContentsMargins(10, 15, 10, 10)
 
-        self.spin_mattina = self.create_styled_spin(1, 20, self.t.limiti_fascia.get(TipoFascia.MATTINA, 7))
-        self.spin_pomeriggio = self.create_styled_spin(1, 20, self.t.limiti_fascia.get(TipoFascia.POMERIGGIO, 6))
-        self.spin_notte = self.create_styled_spin(1, 10, self.t.limiti_fascia.get(TipoFascia.NOTTE, 1))
+        # --- COLONNA 1: MATTINA ---
+        m_box = QVBoxLayout()
+        m_title = QLabel("MATTINA")
+        m_title.setStyleSheet("font-weight: bold; color: #3b82f6; font-size: 14px; margin-bottom: 5px;")
+        m_form = QFormLayout()
+        self.m_pt = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.MATTINA][0])
+        self.m_p1 = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.MATTINA][1])
+        self.m_p2 = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.MATTINA][2])
+        self.m_jolly = self.create_styled_spin(0, 5, self.t.limiti_piani_fascia[TipoFascia.MATTINA]['jolly'])
+        m_form.addRow("Piano Terra", self.m_pt)
+        m_form.addRow("1° Piano", self.m_p1)
+        m_form.addRow("2° Piano", self.m_p2)
+        m_form.addRow("Jolly", self.m_jolly)
+        m_box.addWidget(m_title)
+        m_box.addLayout(m_form)
+        gen_grid.addLayout(m_box, 0, 0)
 
-        fascia_form.addRow("Operatori Mattina:", self.spin_mattina)
-        fascia_form.addRow("Operatori Pomeriggio:", self.spin_pomeriggio)
-        fascia_form.addRow("Operatori Notte:", self.spin_notte)
-        fascia_card.layout().addLayout(fascia_form)
-        container_layout.addWidget(fascia_card)
+        # --- COLONNA 2: POMERIGGIO ---
+        p_box = QVBoxLayout()
+        p_title = QLabel("POMERIGGIO")
+        p_title.setStyleSheet("font-weight: bold; color: #ea580c; font-size: 14px; margin-bottom: 5px;")
+        p_form = QFormLayout()
+        self.p_pt = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.POMERIGGIO][0])
+        self.p_p1 = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.POMERIGGIO][1])
+        self.p_p2 = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.POMERIGGIO][2])
+        self.p_jolly = self.create_styled_spin(0, 5, self.t.limiti_piani_fascia[TipoFascia.POMERIGGIO]['jolly'])
+        p_form.addRow("Piano Terra", self.p_pt)
+        p_form.addRow("1° Piano", self.p_p1)
+        p_form.addRow("2° Piano", self.p_p2)
+        p_form.addRow("Jolly", self.p_jolly)
+        p_box.addWidget(p_title)
+        p_box.addLayout(p_form)
+        gen_grid.addLayout(p_box, 0, 1)
 
-        # --- SEZIONE 2: VINCOLI DI SISTEMA E PIANI ---
-        sys_card = self.create_setting_card("Parametri di Sistema", "Configura i jolly e i limiti di affollamento per piano.")
+        # --- COLONNA 3: NOTTE ---
+        n_box = QVBoxLayout()
+        n_title = QLabel("TURNO NOTTE")
+        n_title.setStyleSheet("font-weight: bold; color: #6366f1; font-size: 14px; margin-bottom: 5px;")
+        n_form = QFormLayout()
+        self.n_tot = self.create_styled_spin(1, 5, self.t.limiti_piani_fascia[TipoFascia.NOTTE][0])
+        n_form.addRow("Genera (A.I.)", self.n_tot)
+        n_box.addWidget(n_title)
+        n_box.addLayout(n_form)
+        n_box.addStretch()
+        gen_grid.addLayout(n_box, 0, 2)
+
+        gen_card.layout().addLayout(gen_grid)
+        container_layout.addWidget(gen_card)
+
+        # --- CARD 2: VINCOLI MANUALI E SICUREZZA ---
+        sys_card = self.create_setting_card("Parametri Manuali", "Imposta i limiti invalicabili per l'inserimento manuale dei turni da parte dell'utente.")
         sys_form = QFormLayout()
         sys_form.setSpacing(15)
-        
-        self.spin_jolly = self.create_styled_spin(0, 5, self.t.max_jolly_per_turno)
-        self.spin_piano = self.create_styled_spin(1, 10, self.t.max_dipendenti_per_piano)
+        sys_form.setContentsMargins(10, 10, 10, 0)
 
-        sys_form.addRow("Max Jolly per turno:", self.spin_jolly)
-        sys_form.addRow("Max Dipendenti per piano (Default):", self.spin_piano)
+        self.spin_jolly_globale = self.create_styled_spin(0, 5, self.t.max_jolly_per_turno)
+        self.n_manual = self.create_styled_spin(1, 10, self.t.limiti_piani_fascia[TipoFascia.NOTTE].get('manual_limit', 2))
+        
+        lbl_jolly = QLabel("Limite Jolly per fascia:")
+        lbl_jolly.setToolTip("Blocca l'inserimento manuale se si supera questo numero di Jolly in un singolo turno.")
+        sys_form.addRow(lbl_jolly, self.spin_jolly_globale)
+
+        lbl_n_manual = QLabel("Capienza massima Notte:")
+        lbl_n_manual.setToolTip("Permette l'inserimento manuale di operatori extra di notte (es. per emergenze) fino a questo limite.")
+        sys_form.addRow(lbl_n_manual, self.n_manual)
+
         sys_card.layout().addLayout(sys_form)
         container_layout.addWidget(sys_card)
 
@@ -149,14 +195,24 @@ class ImpostazioniView(QWidget):
 
     def save_settings(self):
         try:
-            # Salvataggio Limiti Fascia
-            self.t.set_config_limite_fascia(TipoFascia.MATTINA, self.spin_mattina.value())
-            self.t.set_config_limite_fascia(TipoFascia.POMERIGGIO, self.spin_pomeriggio.value())
-            self.t.set_config_limite_fascia(TipoFascia.NOTTE, self.spin_notte.value())
+            # Mattina
+            self.t.set_config_limite_piano_fascia(TipoFascia.MATTINA, 0, self.m_pt.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.MATTINA, 1, self.m_p1.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.MATTINA, 2, self.m_p2.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.MATTINA, 'jolly', self.m_jolly.value())
+            
+            # Pomeriggio
+            self.t.set_config_limite_piano_fascia(TipoFascia.POMERIGGIO, 0, self.p_pt.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.POMERIGGIO, 1, self.p_p1.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.POMERIGGIO, 2, self.p_p2.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.POMERIGGIO, 'jolly', self.p_jolly.value())
+            
+            # Notte
+            self.t.set_config_limite_piano_fascia(TipoFascia.NOTTE, 0, self.n_tot.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.NOTTE, 'manual_limit', self.n_manual.value())
 
-            # Salvataggio Parametri Sistema
-            self.t.set_config_max_jolly(self.spin_jolly.value())
-            self.t.set_config_max_piano(self.spin_piano.value())
+            # Parametri Sistema ripristinati
+            self.t.set_config_max_jolly(self.spin_jolly_globale.value())
 
             QMessageBox.information(self, "Successo", "Configurazioni salvate correttamente nel database.")
         except Exception as e:
