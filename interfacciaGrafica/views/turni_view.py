@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QTableWidget, QTableWidgetItem, QFileDialog,
     QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog, QCheckBox,
     QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter, QMenu,
-    QProgressDialog, QApplication
+    QProgressDialog, QApplication, QDialogButtonBox
 )
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import Qt, QSize, QDate, QRect, pyqtSignal
@@ -17,6 +17,52 @@ from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 # Import del modulo di esportazione
 from sistemaTurnazione.sistemaEsportazione import genera_pdf_settimanale
 from sistemaTurnazione.festivita_util import get_festivita_italiane
+
+class NottiExtraDialog(QDialog):
+    def __init__(self, start_date: date, notti_esistenti: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Impostazioni Generazione Notti")
+        self.start_date = start_date
+        self.notti_esistenti = notti_esistenti
+        self.giorni_selezionati = []
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        lbl_info = QLabel("Vuoi avviare la generazione automatica dei turni per questa settimana? I turni esistenti verranno mantenuti, saranno riempiti solo i posti vacanti.\n\nScegli per quali giorni vuoi che il sistema generi DUE operatori per il turno di Notte:")
+        lbl_info.setWordWrap(True)
+        lbl_info.setStyleSheet("font-size: 14px; margin-bottom: 10px;")
+        layout.addWidget(lbl_info)
+        
+        self.checkboxes = []
+        giorni_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+        for i in range(7):
+            giorno_dt = self.start_date + timedelta(days=i)
+            cb = QCheckBox(f"{giorni_nomi[i]} {giorno_dt.strftime('%d/%m')}")
+            cb.setProperty("data_giorno", giorno_dt)
+            # Se era già parzialmente riempita dal dirigente, la preselezioniamo
+            if giorno_dt in self.notti_esistenti:
+                cb.setChecked(True)
+                cb.setText(cb.text() + " (Già 1 operatore presente)")
+            
+            self.checkboxes.append(cb)
+            layout.addWidget(cb)
+            
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
+        
+        self.setStyleSheet("""
+            QLabel { font-size: 14px; }
+            QCheckBox { font-size: 14px; spacing: 8px; margin: 2px 0; }
+            QCheckBox::indicator { width: 18px; height: 18px; }
+        """)
+
+    def accept(self):
+        self.giorni_selezionati = [cb.property("data_giorno") for cb in self.checkboxes if cb.isChecked()]
+        super().accept()
 
 class AssignTurnoDialog(QDialog):
     def __init__(self, dipendenti, dt_turno, tipo_fascia, parent=None, assegnazione_esistente=None):
@@ -1559,39 +1605,19 @@ class TurniView(QWidget):
 
         settimana_dict = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana))
 
-        # Controlla se ci sono notti parzialmente inserite (esattamente 1) per chiedere se completarle a 2
+        # Rileviamo eventuali notti già parzialmente inserite per suggerirle nel dialog
         notti_esistenti = []
         if settimana_dict:
             for dt, fasce_giorno in settimana_dict.items():
                 if TipoFascia.NOTTE in fasce_giorno and len(fasce_giorno[TipoFascia.NOTTE].assegnazioni) == 1:
                     notti_esistenti.append(dt)
 
-        date_notti_extra = []
-        if notti_esistenti:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Gestione Notti Inserite Manualmente")
-            msg.setText("Sono stati rilevati dei turni notturni con 1 operatore già assegnato.")
-            msg.setInformativeText("Vuoi che il sistema affianchi automaticamente un SECONDO operatore (turno in più) o preferisci mantenere il limite standard di 1 solo operatore?")
-            msg.setIcon(QMessageBox.Icon.Question)
+        # Mostriamo il nuovo Dialog globale per le impostazioni e confermare la generazione
+        dialog = NottiExtraDialog(self.current_monday, notti_esistenti, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return  # Interrompe la generazione se l'utente annulla
             
-            btn_in_piu = msg.addButton("Aggiungi Secondo Operatore", QMessageBox.ButtonRole.YesRole)
-            btn_vincoli = msg.addButton("Mantieni 1 Operatore", QMessageBox.ButtonRole.NoRole)
-            btn_annulla = msg.addButton("Annulla", QMessageBox.ButtonRole.RejectRole)
-            
-            msg.exec()
-            
-            if msg.clickedButton() == btn_annulla:
-                return
-            elif msg.clickedButton() == btn_in_piu:
-                date_notti_extra = notti_esistenti
-        else:
-            # Conferma
-            reply = QMessageBox.question(self, "Generazione Automatica", 
-                                       "Vuoi avviare la generazione automatica dei turni per questa settimana usando l'algoritmo di rotazione?\n\nNota: i turni esistenti verranno mantenuti, verranno riempiti solo i posti vacanti.",
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            
-            if reply != QMessageBox.StandardButton.Yes:
-                return
+        date_notti_extra = dialog.giorni_selezionati
 
         # Feedback visivo di caricamento
         progress = QProgressDialog(self)
