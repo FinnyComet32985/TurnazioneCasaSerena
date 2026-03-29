@@ -692,9 +692,20 @@ class Turnazione:
                     self.inizializza_settimana(anno_r, sett_r)
                     
                 if self.add_turno(giorno_riposo, TipoFascia.RIPOSO, StatoFascia.CREATO):
-                    desc_riposo = "smontante" if giorno_riposo == data_domani else "riposo"
-                    print(f"Assegnazione automatica turno RIPOSO ({desc_riposo}) per {dipendente_obj.nome} {dipendente_obj.cognome} il {giorno_riposo}")
-                    self.assegna_turno(sistema_dipendenti, id_dipendente, giorno_riposo, TipoFascia.RIPOSO, piano=None)
+                    try:
+                        self.assegna_turno(sistema_dipendenti, id_dipendente, giorno_riposo, TipoFascia.RIPOSO, piano=None)
+                        desc_riposo = "smontante" if giorno_riposo == data_domani else "riposo"
+                        print(f"Assegnazione automatica turno RIPOSO ({desc_riposo}) per {dipendente_obj.nome} {dipendente_obj.cognome} il {giorno_riposo}")
+                    except ValueError as e:
+                        # Controlla se sul giorno_riposo il dipendente ha già un turno di NOTTE
+                        turni_giorno = [f.tipo for f, a in self.get_assegnazioni_dipendente((anno_r, sett_r), id_dipendente) if f.data_turno == giorno_riposo]
+                        if TipoFascia.NOTTE in turni_giorno:
+                            print(f"Riposo su {giorno_riposo} saltato per {dipendente_obj.nome}: il dipendente ha già una NOTTE.")
+                            continue
+                        
+                        print(f"Rollback Notte per {dipendente_obj.nome} {dipendente_obj.cognome} il {data_turno}: Impossibile assegnare riposo su {giorno_riposo}.")
+                        self.rimuovi_assegnazione(id_dipendente, data_turno, TipoFascia.NOTTE)
+                        raise ValueError(f"Conflitto con riposo obbligatorio: {str(e)}")
 
         return esito
 
@@ -765,6 +776,25 @@ class Turnazione:
                     # Proteggiamo i due giorni successivi alla notte
                     protetti.add((ass.dipendente.id_dipendente, data_prec + timedelta(days=1)))
                     protetti.add((ass.dipendente.id_dipendente, data_prec + timedelta(days=2)))
+
+        # 2. Pulizia attiva: Rimuoviamo i riposi AUTOMATICI caduti nella settimana successiva
+        # causati dalle Notti di Sabato e Domenica della settimana corrente.
+        for i in [5, 6]: # Sabato e Domenica
+            data_notte = primo_giorno + timedelta(days=i)
+            fascia_notte = settimana_dict.get(data_notte, {}).get(TipoFascia.NOTTE)
+            if fascia_notte:
+                for ass in fascia_notte.assegnazioni:
+                    # Chiamiamo implicitamente remove_assegnazione sulla fascia notte per sfruttare il suo automatismo
+                    # Ma dato che la settimana corrente verrà comunque asfaltata dal DB, ci basta rimuovere solo i riposi
+                    data_domani = data_notte + timedelta(days=1)
+                    data_dopodomani = data_notte + timedelta(days=2)
+                    
+                    for giorno_r in [data_domani, data_dopodomani]:
+                        anno_r, sett_r, _ = giorno_r.isocalendar()
+                        fascia_r = self.turnazioneSettimanale.get((anno_r, sett_r), {}).get(giorno_r, {}).get(TipoFascia.RIPOSO)
+                        if fascia_r:
+                            # Rimuoviamo il dipendente dal riposo su DB e in memoria
+                            fascia_r.remove_assegnazione(ass.dipendente.id_dipendente)
         
         ultimo_giorno = primo_giorno + timedelta(days=6)
         

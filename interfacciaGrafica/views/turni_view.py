@@ -1533,50 +1533,102 @@ class TurniView(QWidget):
         self.aggiorna_tabella()
         
     def genera_turni_auto(self):
-        # Conferma
-        reply = QMessageBox.question(self, "Generazione Automatica", 
-                                   "Vuoi avviare la generazione automatica dei turni per questa settimana usando l'algoritmo di rotazione?\n\nNota: i turni esistenti verranno mantenuti, verranno riempiti solo i posti vacanti.",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        anno, settimana, _ = self.current_monday.isocalendar()
+
+        # Controllo prevenzione generazione non cronologica
+        next_monday = self.current_monday + timedelta(days=7)
+        anno_next, sett_next, _ = next_monday.isocalendar()
+        next_week_dict = self.interfaccia.turnazione.get_turnazione_settimana((anno_next, sett_next))
         
-        if reply == QMessageBox.StandardButton.Yes:
-            anno, settimana, _ = self.current_monday.isocalendar()
-            
-            # Feedback visivo di caricamento
-            progress = QProgressDialog(self)
-            # Aggiungiamo dei ritorni a capo per dare respiro al testo senza la barra
-            progress.setLabelText("\nGenerazione automatica in corso... Attendere.\n")
-            progress.setWindowTitle("Elaborazione")
-            progress.setWindowModality(Qt.WindowModality.WindowModal)
-            
-            # Togliamo la barra di caricamento che rimaneva ferma
-            bar = progress.findChild(QProgressBar)
-            if bar:
-                bar.hide()
+        has_future_shifts = False
+        if next_week_dict:
+            for fasce_giorno in next_week_dict.values():
+                for tf, fascia in fasce_giorno.items():
+                    if tf in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE] and len(fascia.assegnazioni) > 0:
+                        has_future_shifts = True
+                        break
+                if has_future_shifts:
+                    break
+        
+        if has_future_shifts:
+            QMessageBox.critical(self, "Ordine di Generazione Non Valido", 
+                               "Impossibile generare la turnazione perché la settimana successiva è già stata generata e contiene turni attivi.\n\n"
+                               "Per garantire la corretta programmazione genetica dei riposi a cavallo, le settimane devono essere generate in ordine.\n\n"
+                               "Cancella prima la turnazione per la settimana prossima e poi riprova.")
+            return
 
-            progress.setMinimumWidth(350)
-            progress.setMinimumDuration(0) # Appare istantaneamente
-            progress.setCancelButton(None)
-            
-            # Applichiamo uno stile forte al testo interno
-            progress.setStyleSheet("QLabel { color: #1e293b; font-weight: bold; font-size: 14px; qproperty-alignment: AlignCenter; }")
+        settimana_dict = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana))
 
-            progress.show()
-            # Processiamo gli eventi due volte per essere sicuri che il sistema operativo disegni la finestra
-            QApplication.processEvents()
-            QApplication.processEvents()
+        # Controlla se ci sono notti parzialmente inserite (esattamente 1) per chiedere se completarle a 2
+        notti_esistenti = []
+        if settimana_dict:
+            for dt, fasce_giorno in settimana_dict.items():
+                if TipoFascia.NOTTE in fasce_giorno and len(fasce_giorno[TipoFascia.NOTTE].assegnazioni) == 1:
+                    notti_esistenti.append(dt)
+
+        date_notti_extra = []
+        if notti_esistenti:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Gestione Notti Inserite Manualmente")
+            msg.setText("Sono stati rilevati dei turni notturni con 1 operatore già assegnato.")
+            msg.setInformativeText("Vuoi che il sistema affianchi automaticamente un SECONDO operatore (turno in più) o preferisci mantenere il limite standard di 1 solo operatore?")
+            msg.setIcon(QMessageBox.Icon.Question)
             
-            from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
-            generatore = SistemaGenerazione(self.interfaccia.turnazione, self.interfaccia.sistema_dipendenti)
+            btn_in_piu = msg.addButton("Aggiungi Secondo Operatore", QMessageBox.ButtonRole.YesRole)
+            btn_vincoli = msg.addButton("Mantieni 1 Operatore", QMessageBox.ButtonRole.NoRole)
+            btn_annulla = msg.addButton("Annulla", QMessageBox.ButtonRole.RejectRole)
             
-            esito = generatore.genera_turnazione_automatica(anno, settimana, genera_piani=True)
+            msg.exec()
             
-            progress.close()
+            if msg.clickedButton() == btn_annulla:
+                return
+            elif msg.clickedButton() == btn_in_piu:
+                date_notti_extra = notti_esistenti
+        else:
+            # Conferma
+            reply = QMessageBox.question(self, "Generazione Automatica", 
+                                       "Vuoi avviare la generazione automatica dei turni per questa settimana usando l'algoritmo di rotazione?\n\nNota: i turni esistenti verranno mantenuti, verranno riempiti solo i posti vacanti.",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             
-            if esito:
-                QMessageBox.information(self, "Completato", "Turnazione generata con successo.")
-                self.aggiorna_tabella()
-            else:
-                QMessageBox.critical(self, "Errore", "Si è verificato un errore durante la generazione.")
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        # Feedback visivo di caricamento
+        progress = QProgressDialog(self)
+        # Aggiungiamo dei ritorni a capo per dare respiro al testo senza la barra
+        progress.setLabelText("\nGenerazione automatica in corso... Attendere.\n")
+        progress.setWindowTitle("Elaborazione")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        
+        # Togliamo la barra di caricamento che rimaneva ferma
+        bar = progress.findChild(QProgressBar)
+        if bar:
+            bar.hide()
+
+        progress.setMinimumWidth(350)
+        progress.setMinimumDuration(0) # Appare istantaneamente
+        progress.setCancelButton(None)
+        
+        # Rimuoviamo il colore hardcoded per supportare il dark mode di Stitch
+        progress.setStyleSheet("QLabel { font-weight: bold; font-size: 14px; qproperty-alignment: AlignCenter; }")
+
+        progress.show()
+        # Processiamo gli eventi due volte per essere sicuri che il sistema operativo disegni la finestra
+        QApplication.processEvents()
+        QApplication.processEvents()
+        
+        from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
+        generatore = SistemaGenerazione(self.interfaccia.turnazione, self.interfaccia.sistema_dipendenti)
+        
+        esito = generatore.genera_turnazione_automatica(anno, settimana, genera_piani=True, date_notti_extra=date_notti_extra)
+        
+        progress.close()
+        
+        if esito:
+            QMessageBox.information(self, "Completato", "Turnazione generata con successo.")
+            self.aggiorna_tabella()
+        else:
+            QMessageBox.critical(self, "Errore", "Si è verificato un errore durante la generazione.")
 
     def approva_settimana_ui(self):
         # --- Controllo preventivo della copertura dei turni ---
