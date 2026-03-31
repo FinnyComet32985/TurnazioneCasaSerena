@@ -1,17 +1,20 @@
-import sqlite3
+from db.database import DBManager
+from path_util import resource_path
 
 def init_db():
+    DBManager.initialize()
+    connection = DBManager.get_conn()
+    cursor = connection.cursor()
     
-    connection = sqlite3.connect('./db/turnazione.db')
-
     #recupero e lettura delle script sql
-    schema = sql_read("./db/schema.sql")
+    schema = sql_read(resource_path("db/schema.sql"))
     
     # esecuzione script sql per la creazione dello schema
-    connection.executescript(schema)
+    cursor.execute(schema)
     
     connection.commit()
-    connection.close()
+    cursor.close()
+    DBManager.put_conn(connection)
 
 
 def sql_read(sql_file_path):

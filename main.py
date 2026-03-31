@@ -3,6 +3,7 @@ import os
 import calendar
 from datetime import date, datetime
 from PyQt6.QtWidgets import QApplication
+from db.database import DBManager
 from db.initDB import init_db
 from sistemaCaricamento import load_dipendenti, load_turni, load_last_update
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
@@ -12,12 +13,12 @@ import sistemaSalvataggio
 from interfacciaGrafica.main_window import MainWindow
 
 def main():
-    db_exist = os.path.isfile('./db/turnazione.db')
+    DBManager.initialize()
 
-    if db_exist:
+    try:
         sistema_dipendenti = load_dipendenti()
         turnazione = load_turni(sistema_dipendenti)
-    else:
+    except Exception:
         init_db()
         sistema_dipendenti = SistemaDipendenti()
         turnazione = Turnazione()

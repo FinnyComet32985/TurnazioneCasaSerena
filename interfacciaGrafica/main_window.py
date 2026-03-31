@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor
 from PyQt6.QtCore import Qt, QSize
+from path_util import resource_path
 
 # Importiamo le viste
 from interfacciaGrafica.views.turni_view import TurniView
@@ -53,7 +54,7 @@ class MainWindow(QMainWindow):
         
         # Creiamo un QLabel per contenere l'immagine del logo
         logo_label = QLabel()
-        pixmap = QPixmap("./interfacciaGrafica/assets/logo.svg")
+        pixmap = QPixmap(resource_path("interfacciaGrafica/assets/logo.svg"))
         if not pixmap.isNull():
             logo_label.setPixmap(pixmap.scaled(180, 50, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -65,7 +66,7 @@ class MainWindow(QMainWindow):
         self.btn_personale = QPushButton("  Dipendenti")
         self.btn_personale.setObjectName("sidebar_btn")
         self.btn_personale.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_personale.setIcon(QIcon("./interfacciaGrafica/assets/people.svg"))
+        self.btn_personale.setIcon(QIcon(resource_path("interfacciaGrafica/assets/people.svg")))
         self.btn_personale.setIconSize(QSize(24, 24))
         self.btn_personale.clicked.connect(lambda: self.switch_page(1))
 
@@ -73,7 +74,7 @@ class MainWindow(QMainWindow):
         self.btn_turni = QPushButton("  Turnazione")
         self.btn_turni.setObjectName("sidebar_btn_active")
         self.btn_turni.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_turni.setIcon(QIcon("./interfacciaGrafica/assets/calendar.svg"))
+        self.btn_turni.setIcon(QIcon(resource_path("interfacciaGrafica/assets/calendar.svg")))
         self.btn_turni.setIconSize(QSize(24, 24))
         self.btn_turni.clicked.connect(lambda: self.switch_page(0))
 
@@ -81,7 +82,7 @@ class MainWindow(QMainWindow):
         self.btn_impostazioni = QPushButton("  Impostazioni")
         self.btn_impostazioni.setObjectName("sidebar_btn")
         self.btn_impostazioni.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_impostazioni.setIcon(QIcon("./interfacciaGrafica/assets/settings.svg"))
+        self.btn_impostazioni.setIcon(QIcon(resource_path("interfacciaGrafica/assets/settings.svg")))
         self.btn_impostazioni.setIconSize(QSize(24, 24))
         self.btn_impostazioni.clicked.connect(lambda: self.switch_page(2))
 
@@ -117,9 +118,9 @@ class MainWindow(QMainWindow):
         self.main_content.setCurrentIndex(index)
         
         # Aggiornamento dinamico delle icone tramite Painter per feedback visivo
-        self.update_navbar_icon(self.btn_turni, "./interfacciaGrafica/assets/calendar.svg", index == 0)
-        self.update_navbar_icon(self.btn_personale, "./interfacciaGrafica/assets/people.svg", index == 1)
-        self.update_navbar_icon(self.btn_impostazioni, "./interfacciaGrafica/assets/settings.svg", index == 2)
+        self.update_navbar_icon(self.btn_turni, resource_path("interfacciaGrafica/assets/calendar.svg"), index == 0)
+        self.update_navbar_icon(self.btn_personale, resource_path("interfacciaGrafica/assets/people.svg"), index == 1)
+        self.update_navbar_icon(self.btn_impostazioni, resource_path("interfacciaGrafica/assets/settings.svg"), index == 2)
 
         self.btn_turni.setObjectName("sidebar_btn_active" if index == 0 else "sidebar_btn")
         self.btn_personale.setObjectName("sidebar_btn_active" if index == 1 else "sidebar_btn")

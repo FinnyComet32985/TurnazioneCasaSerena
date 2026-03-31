@@ -1,11 +1,11 @@
 -- TABELLA DIPENDENTE --
 CREATE TABLE IF NOT EXISTS dipendente (
-    idDipendente INTEGER PRIMARY KEY AUTOINCREMENT,
+    idDipendente SERIAL PRIMARY KEY,
     nome TEXT NOT NULL,
     cognome TEXT NOT NULL,
     ferieRimanenti REAL NOT NULL,
     rolRimanenti REAL NOT NULL,
-    stato VARCHAR(11) CHECK(stato IN ('ASSUNTO', 'LICENZIATO')) NOT NULL DEFAULT 'ASSUNTO'
+    stato VARCHAR(20) CHECK(stato IN ('ASSUNTO', 'LICENZIATO')) NOT NULL DEFAULT 'ASSUNTO'
 );
 
 -- TABERLLA VARIAZIONE BANCA ORE
@@ -20,10 +20,10 @@ CREATE TABLE IF NOT EXISTS variazioneBancaOre (
 
 -- TABELLA TURNO --
 CREATE TABLE IF NOT EXISTS turno (
-    idTurno INTEGER PRIMARY KEY AUTOINCREMENT,
+    idTurno SERIAL PRIMARY KEY,
     dataTurno DATE NOT NULL,
-    fasciaOraria VARCHAR(9) CHECK(fasciaOraria IN ('MATTINA', 'POMERIGGIO', 'NOTTE', 'RIPOSO')) NOT NULL,
-    stato VARCHAR(9) CHECK(stato IN ('GENERATO', 'MODIFICATO', 'APPROVATO', 'CREATO', 'VUOTA')) NOT NULL,
+    fasciaOraria VARCHAR(20) CHECK(fasciaOraria IN ('MATTINA', 'POMERIGGIO', 'NOTTE', 'RIPOSO')) NOT NULL,
+    stato VARCHAR(20) CHECK(stato IN ('GENERATO', 'MODIFICATO', 'APPROVATO', 'CREATO', 'VUOTA', 'GENERATA', 'APPROVATA')) NOT NULL,
     UNIQUE (dataTurno, fasciaOraria)
 );
 
@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS lavora (
     idDipendente INTEGER NOT NULL,
     idTurno INTEGER NOT NULL,
     piano INTEGER,
-    jolly INTEGER CHECK(jolly IN (0, 1)) NOT NULL,
-    turnoBreve INTEGER CHECK(turnoBreve IN (0, 1)) NOT NULL,
+    jolly BOOLEAN NOT NULL DEFAULT FALSE,
+    turnoBreve BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (idDipendente, idTurno),
     FOREIGN KEY (idDipendente) REFERENCES dipendente(idDipendente),
     FOREIGN KEY (idTurno) REFERENCES turno(idTurno) ON DELETE CASCADE
@@ -41,11 +41,11 @@ CREATE TABLE IF NOT EXISTS lavora (
 
 -- TABELLA ASSENZA --
 CREATE TABLE IF NOT EXISTS assenza (
-    idAssenza INTEGER PRIMARY KEY AUTOINCREMENT,
+    idAssenza SERIAL PRIMARY KEY,
     idDipendente INTEGER NOT NULL,
     tipo VARCHAR(12) CHECK(tipo IN ('FERIE', 'ROL', 'CERTIFICATO')) NOT NULL,
-    dataInizio DATETIME NOT NULL,
-    dataFine DATETIME NOT NULL,
+    dataInizio TIMESTAMP NOT NULL,
+    dataFine TIMESTAMP NOT NULL,
     CHECK (dataFine >= dataInizio),
     FOREIGN KEY (idDipendente) REFERENCES dipendente(idDipendente)
 );
@@ -56,39 +56,45 @@ CREATE TABLE IF NOT EXISTS configurazione (
     valore TEXT NOT NULL
 );
 
--- TRIGGER CONTROLLO LICENZIAMENTO SU TURNI --
-CREATE TRIGGER IF NOT EXISTS prevent_lavora_licenziato
-BEFORE INSERT ON lavora
-FOR EACH ROW
-WHEN (SELECT stato FROM dipendente WHERE idDipendente = NEW.idDipendente) = 'LICENZIATO'
+-- FUNZIONE E TRIGGER PER CONTROLLO LICENZIAMENTO --
+CREATE OR REPLACE FUNCTION check_dipendente_attivo_func()
+RETURNS TRIGGER AS $$
 BEGIN
-    SELECT RAISE(ABORT, 'Non è possibile assegnare turni a un dipendente licenziato.');
+    IF (SELECT stato FROM dipendente WHERE idDipendente = NEW.idDipendente) = 'LICENZIATO' THEN
+        RAISE EXCEPTION 'Non è possibile assegnare turni o assenze a un dipendente licenziato.';
+    END IF;
+    RETURN NEW;
 END;
+$$ LANGUAGE plpgsql;
 
--- TRIGGER CONTROLLO LICENZIAMENTO SU ASSENZE --
-CREATE TRIGGER IF NOT EXISTS prevent_assenza_licenziato
+DROP TRIGGER IF EXISTS prevent_lavora_licenziato ON lavora;
+CREATE TRIGGER prevent_lavora_licenziato
+BEFORE INSERT ON lavora
+FOR EACH ROW EXECUTE FUNCTION check_dipendente_attivo_func();
+
+DROP TRIGGER IF EXISTS prevent_assenza_licenziato ON assenza;
+CREATE TRIGGER prevent_assenza_licenziato
 BEFORE INSERT ON assenza
-FOR EACH ROW
-WHEN (SELECT stato FROM dipendente WHERE idDipendente = NEW.idDipendente) = 'LICENZIATO'
+FOR EACH ROW EXECUTE FUNCTION check_dipendente_attivo_func();
+
+-- FUNZIONE E TRIGGER PER CONTROLLO SOVRAPPOSIZIONE ASSENZA --
+CREATE OR REPLACE FUNCTION check_assenza_before_insert_func()
+RETURNS TRIGGER AS $$
 BEGIN
-    SELECT RAISE(ABORT, 'Non è possibile aggiungere assenze a un dipendente licenziato.');
+    IF EXISTS (
+        SELECT 1
+        FROM assenza a
+        JOIN turno t ON t.idTurno = NEW.idTurno
+        WHERE a.idDipendente = NEW.idDipendente
+        AND t.dataTurno BETWEEN a.dataInizio::date AND a.dataFine::date
+    ) THEN
+        RAISE EXCEPTION 'Errore: Il dipendente è in ferie/malattia in questa data.';
+    END IF;
+    RETURN NEW;
 END;
+$$ LANGUAGE plpgsql;
 
-
--- Trigger per impedire assegnazione se il dipendente è assente
-CREATE TRIGGER IF NOT EXISTS check_assenza_before_insert
+DROP TRIGGER IF EXISTS check_assenza_before_insert ON lavora;
+CREATE TRIGGER check_assenza_before_insert
 BEFORE INSERT ON lavora
-BEGIN
-    SELECT CASE
-        WHEN EXISTS (
-            SELECT 1
-            FROM assenza a
-            JOIN turno t ON t.idTurno = NEW.idTurno
-            WHERE a.idDipendente = NEW.idDipendente
-            -- Controlliamo se la data del turno cade nel range dell'assenza.
-            -- Usiamo date() per estrarre solo la parte YYYY-MM-DD dalle stringhe datetime
-            AND t.dataTurno BETWEEN date(a.dataInizio) AND date(a.dataFine)
-        )
-        THEN RAISE(ABORT, 'Errore: Il dipendente è in ferie/malattia in questa data.')
-    END;
-END;
+FOR EACH ROW EXECUTE FUNCTION check_assenza_before_insert_func();

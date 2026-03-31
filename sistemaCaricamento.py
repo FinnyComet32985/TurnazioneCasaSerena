@@ -1,11 +1,11 @@
 import re
-import sqlite3
+from db.database import DBManager
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaTurnazione.turnazione import Turnazione
 from sistemaDipendenti.variazioneBancaOre import VariazioneBancaOre
 
 def load_dipendenti() -> SistemaDipendenti:
-    connection = sqlite3.connect('./db/turnazione.db')
+    connection = DBManager.get_conn()
     cursor = connection.cursor()
 
     query = "select * from dipendente"
@@ -21,12 +21,12 @@ def load_dipendenti() -> SistemaDipendenti:
         id_dip = dipendente_row[0]
 
         # Recuperiamo il saldo totale della banca ore sommando le variazioni dal nuovo database
-        cursor.execute("SELECT SUM(valore) FROM variazioneBancaOre WHERE idDipendente = ?", (id_dip,))
+        cursor.execute("SELECT SUM(valore) FROM variazioneBancaOre WHERE idDipendente = %s", (id_dip,))
         res_banca = cursor.fetchone()
         banca_ore_totale = res_banca[0] if res_banca and res_banca[0] is not None else 0.0
 
         # Recuperiamo le singole variazioni per popolare la lista in memoria e permettere storni corretti
-        cursor.execute("SELECT key, valore, descrizione FROM variazioneBancaOre WHERE idDipendente = ?", (id_dip,))
+        cursor.execute("SELECT key, valore, descrizione FROM variazioneBancaOre WHERE idDipendente = %s", (id_dip,))
         var_rows = cursor.fetchall()
         variazioni = [VariazioneBancaOre(r[0], r[1], r[2]) for r in var_rows]
 
@@ -42,8 +42,8 @@ def load_dipendenti() -> SistemaDipendenti:
         )
 
         # Carichiamo le assenze per questo dipendente
-        query_assenze = "select * from assenza where idDipendente = ?"
-        cursor.execute(query_assenze, (dipendente_row[0],))
+        query_assenze = "SELECT * FROM assenza WHERE idDipendente = %s"
+        cursor.execute(query_assenze, (id_dip,))
         assenze_rows = cursor.fetchall()
 
         for assenza_row in assenze_rows:
@@ -55,12 +55,13 @@ def load_dipendenti() -> SistemaDipendenti:
                 data_fine=assenza_row[4]
             )
     
-    connection.close()
+    cursor.close()
+    DBManager.put_conn(connection)
     return sistema
 
 
 def load_turni(sistema_dipendenti: SistemaDipendenti) -> Turnazione:
-    connection = sqlite3.connect('./db/turnazione.db')
+    connection = DBManager.get_conn()
     cursor = connection.cursor()
 
     query = "select * from turno"
@@ -81,7 +82,7 @@ def load_turni(sistema_dipendenti: SistemaDipendenti) -> Turnazione:
         )
 
         # Carichiamo le assegnazioni (lavora) per questo turno
-        query_lavora = "SELECT idDipendente, piano, jolly, turnoBreve FROM lavora WHERE idTurno = ?"
+        query_lavora = "SELECT idDipendente, piano, jolly, turnoBreve FROM lavora WHERE idTurno = %s"
         cursor.execute(query_lavora, (id_turno,))
         lavora_rows = cursor.fetchall()
 
@@ -99,24 +100,27 @@ def load_turni(sistema_dipendenti: SistemaDipendenti) -> Turnazione:
                 turno_breve=bool(lav[3])
             )
     
-    connection.close()
+    cursor.close()
+    DBManager.put_conn(connection)
     return turnazione
 
 
 def load_last_update():
-    connection = sqlite3.connect('./db/turnazione.db')
+    connection = DBManager.get_conn()
     cursor = connection.cursor()
 
-    query = "SELECT valore FROM configurazione WHERE chiave='last_update'"
+    query = "SELECT valore FROM configurazione WHERE chiave = 'last_update'"
 
     cursor.execute(query)
     result = cursor.fetchone()
 
     if result:
-        connection.close()
+        cursor.close()
+        DBManager.put_conn(connection)
         return result[0]
     else:
-        connection.close()
+        cursor.close()
+        DBManager.put_conn(connection)
         return None
     
     

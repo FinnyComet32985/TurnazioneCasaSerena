@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QSize
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor, QPen, QPainterPath
+from path_util import resource_path
 
 # Import della nuova vista per le assenze
 from .assenze_view import AssenzeView
@@ -17,8 +18,8 @@ class EditAnagraficaDialog(QDialog):
         
         layout = QFormLayout(self)
         
-        self.input_nome = QLineEdit(nome_attuale)
         self.input_cognome = QLineEdit(cognome_attuale)
+        self.input_nome = QLineEdit(nome_attuale)
         
         for inp in [self.input_nome, self.input_cognome]:
             inp.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
@@ -118,7 +119,7 @@ class DettaglioDipendenteView(QWidget):
         # --- Header with Back Button ---
         header_layout = QHBoxLayout()
         btn_back = QPushButton("  Torna alla lista")
-        btn_back.setIcon(QIcon("./interfacciaGrafica/assets/arrow-back.svg"))
+        btn_back.setIcon(QIcon(resource_path("interfacciaGrafica/assets/arrow-back.svg")))
         btn_back.setObjectName("back_button")
         btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_back.setStyleSheet("""
@@ -222,7 +223,7 @@ class DettaglioDipendenteView(QWidget):
 
         self.btn_modifica = QPushButton("  Modifica Dati") # Aggiunti spazi per distanziare l'icona
         self.btn_modifica.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_modifica.setIcon(QIcon("./interfacciaGrafica/assets/pencil.svg"))
+        self.btn_modifica.setIcon(QIcon(resource_path("interfacciaGrafica/assets/pencil.svg")))
         self.btn_modifica.setIconSize(QSize(20, 20))
         self.btn_modifica.setStyleSheet("""
             QPushButton {
@@ -244,7 +245,7 @@ class DettaglioDipendenteView(QWidget):
 
         self.btn_licenzia = QPushButton("  Licenzia Dipendente") # Aggiunti spazi per distanziare l'icona
         self.btn_licenzia.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_licenzia.setIcon(QIcon("./interfacciaGrafica/assets/person-remove.svg"))
+        self.btn_licenzia.setIcon(QIcon(resource_path("interfacciaGrafica/assets/person-remove.svg")))
         self.btn_licenzia.setIconSize(QSize(20, 20))
         self.btn_licenzia.setStyleSheet("""
             QPushButton {
@@ -345,7 +346,7 @@ class DettaglioDipendenteView(QWidget):
             self.btn_modifica.setVisible(True)
             
             self.btn_licenzia.setText("  Licenzia Dipendente")
-            self.btn_licenzia.setIcon(QIcon("./interfacciaGrafica/assets/person-remove.svg"))
+            self.btn_licenzia.setIcon(QIcon(resource_path("interfacciaGrafica/assets/person-remove.svg")))
             self.btn_licenzia.setStyleSheet("""
                 QPushButton {
                     background-color: #fee2e2;
@@ -373,7 +374,7 @@ class DettaglioDipendenteView(QWidget):
             self.btn_licenzia.setText("  Assumi Nuovamente")
             
             # Ricolora l'icona in verde per matchare il testo
-            pix_add = QPixmap("./interfacciaGrafica/assets/person-add.svg")
+            pix_add = QPixmap(resource_path("interfacciaGrafica/assets/person-add.svg"))
             if not pix_add.isNull():
                 painter = QPainter(pix_add)
                 painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)

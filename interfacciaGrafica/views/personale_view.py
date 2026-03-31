@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import Qt, pyqtSignal
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
+from path_util import resource_path
 from datetime import datetime
 
 # Import della nuova vista di dettaglio
@@ -25,8 +26,8 @@ class AddDipendenteDialog(QDialog):
         for inp in [self.input_nome, self.input_cognome]:
             inp.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
 
-        layout.addRow("Nome:", self.input_nome)
         layout.addRow("Cognome:", self.input_cognome)
+        layout.addRow("Nome:", self.input_nome)
         
         btn_layout = QHBoxLayout()
         btn_salva = QPushButton("Salva")
@@ -116,9 +117,9 @@ class PersonaleView(QWidget):
         stats_layout.setSpacing(20)
 
         # Creazione Card (Salviamo le label dei valori in self per aggiornarle dopo)
-        card_totale, self.lbl_tot_dip = self.create_stat_card("TOTALE DIPENDENTI", "-", "#3b82f6", "./interfacciaGrafica/assets/id-card.svg")
-        card_ferie, self.lbl_tot_ferie = self.create_stat_card("FERIE IN CORSO", "-", "#f59e0b", "./interfacciaGrafica/assets/earth.svg")
-        card_cert, self.lbl_tot_cert = self.create_stat_card("PERSONALE IN CERTIFICATO", "-", "#ef4444", "./interfacciaGrafica/assets/fitness.svg")
+        card_totale, self.lbl_tot_dip = self.create_stat_card("TOTALE DIPENDENTI", "-", "#3b82f6", resource_path("interfacciaGrafica/assets/id-card.svg"))
+        card_ferie, self.lbl_tot_ferie = self.create_stat_card("FERIE IN CORSO", "-", "#f59e0b", resource_path("interfacciaGrafica/assets/earth.svg"))
+        card_cert, self.lbl_tot_cert = self.create_stat_card("PERSONALE IN CERTIFICATO", "-", "#ef4444", resource_path("interfacciaGrafica/assets/fitness.svg"))
 
         stats_layout.addWidget(card_totale)
         stats_layout.addWidget(card_ferie)
@@ -145,7 +146,7 @@ class PersonaleView(QWidget):
         search_layout.setSpacing(6)
 
         search_icon = QLabel()
-        search_icon.setPixmap(QPixmap("./interfacciaGrafica/assets/search.svg").scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        search_icon.setPixmap(QPixmap(resource_path("interfacciaGrafica/assets/search.svg")).scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Cerca dipendente...")
@@ -163,7 +164,7 @@ class PersonaleView(QWidget):
         search_layout.addWidget(self.search_input)
         
         self.btn_assumi = QPushButton(" Assumi Dipendente")
-        self.btn_assumi.setIcon(QIcon("./interfacciaGrafica/assets/person-add.svg"))
+        self.btn_assumi.setIcon(QIcon(resource_path("interfacciaGrafica/assets/person-add.svg")))
         self.btn_assumi.setStyleSheet("""
             QPushButton {
                 padding: 8px 16px; 
@@ -388,7 +389,7 @@ class PersonaleView(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         icon_label = QLabel()
-        pixmap = QPixmap("./interfacciaGrafica/assets/arrow-forward.svg")
+        pixmap = QPixmap(resource_path("interfacciaGrafica/assets/arrow-forward.svg"))
         if not pixmap.isNull():
             icon_label.setPixmap(pixmap.scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         

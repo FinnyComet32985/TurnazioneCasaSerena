@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon
+from path_util import resource_path
 from sistemaTurnazione.fasciaOraria import TipoFascia
 
 class ImpostazioniView(QWidget):
@@ -37,7 +38,7 @@ class ImpostazioniView(QWidget):
         header_layout.addStretch()
 
         self.btn_save = QPushButton("  Salva Configurazioni")
-        self.btn_save.setIcon(QIcon("./interfacciaGrafica/assets/save.svg"))
+        self.btn_save.setIcon(QIcon(resource_path("interfacciaGrafica/assets/save.svg")))
         self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.setFixedWidth(220)
         self.btn_save.setStyleSheet("""

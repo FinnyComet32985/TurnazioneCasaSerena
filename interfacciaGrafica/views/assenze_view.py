@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor, QAction
 from PyQt6.QtCore import Qt, QSize, QDateTime, pyqtSignal
+from path_util import resource_path
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 from datetime import datetime, date, timedelta
 
@@ -143,9 +144,9 @@ class AssenzaCard(QFrame):
         # Icona e Stile basato sul tipo
         tipo_assenza = TipoAssenza(assenza.tipo)
         config = {
-            TipoAssenza.FERIE: ("./interfacciaGrafica/assets/american-football.svg", "#f0fdf4", "#16a34a"),
-            TipoAssenza.ROL: ("./interfacciaGrafica/assets/time.svg", "#fefce8", "#ca8a04"),
-            TipoAssenza.CERTIFICATO: ("./interfacciaGrafica/assets/medkit.svg", "#fee2e2", "#dc2626")
+            TipoAssenza.FERIE: (resource_path("interfacciaGrafica/assets/american-football.svg"), "#f0fdf4", "#16a34a"),
+            TipoAssenza.ROL: (resource_path("interfacciaGrafica/assets/time.svg"), "#fefce8", "#ca8a04"),
+            TipoAssenza.CERTIFICATO: (resource_path("interfacciaGrafica/assets/medkit.svg"), "#fee2e2", "#dc2626")
         }
         icon_path, bg_color, icon_color = config.get(tipo_assenza)
 
@@ -219,9 +220,9 @@ class AssenzaCard(QFrame):
         """)
         
         edit_act = QAction("Modifica Periodo", self)
-        edit_act.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/pencil.svg", "#3b82f6"))
+        edit_act.setIcon(self.get_colored_icon(resource_path("interfacciaGrafica/assets/pencil.svg"), "#3b82f6"))
         delete_act = QAction("Elimina Assenza", self)
-        delete_act.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
+        delete_act.setIcon(self.get_colored_icon(resource_path("interfacciaGrafica/assets/trash-bin.svg"), "#dc2626"))
         
         menu.addAction(edit_act)
         menu.addSeparator()
@@ -264,7 +265,7 @@ class AssenzeView(QWidget):
         
         self.btn_add = QPushButton("  Aggiungi Assenza")
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_add.setIcon(QIcon("./interfacciaGrafica/assets/add-circle.svg"))
+        self.btn_add.setIcon(QIcon(resource_path("interfacciaGrafica/assets/add-circle.svg")))
         self.btn_add.setIconSize(QSize(20, 20))
         self.btn_add.setStyleSheet("""
             QPushButton {
@@ -393,12 +394,12 @@ class AssenzeView(QWidget):
         layout.setSpacing(20)
 
         # Titolo Generale + Bottone Modifica
-        header_layout = QHBoxLayout()
+        header_sub_layout = QHBoxLayout()
         title_lbl = QLabel("Resoconto Mensile")
         title_lbl.setStyleSheet("font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 5px;")
         
         # Preparo l'icona ricolorandola di blu
-        pix_pencil = QPixmap("./interfacciaGrafica/assets/pencil.svg")
+        pix_pencil = QPixmap(resource_path("interfacciaGrafica/assets/pencil.svg"))
         if not pix_pencil.isNull():
             painter = QPainter(pix_pencil)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
@@ -421,10 +422,10 @@ class AssenzeView(QWidget):
         """)
         self.btn_modifica.clicked.connect(self.cmd_modifica_resoconto)
 
-        header_layout.addWidget(title_lbl)
-        header_layout.addStretch()
-        header_layout.addWidget(self.btn_modifica)
-        layout.addLayout(header_layout)
+        header_sub_layout.addWidget(title_lbl)
+        header_sub_layout.addStretch()
+        header_sub_layout.addWidget(self.btn_modifica)
+        layout.addLayout(header_sub_layout)
 
         layout.addSpacing(10)
 
@@ -544,7 +545,7 @@ class AssenzeView(QWidget):
 
         info_icon = QLabel()
         
-        pixmap = QPixmap("./interfacciaGrafica/assets/information-circle.svg")
+        pixmap = QPixmap(resource_path("interfacciaGrafica/assets/information-circle.svg"))
         painter = QPainter(pixmap)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
         painter.fillRect(pixmap.rect(), QColor("#1e3a8a")) # Blu Scuro (uguale al testo)
