@@ -4,7 +4,6 @@ import calendar
 from datetime import date, datetime
 from PyQt6.QtWidgets import QApplication
 from db.initDB import init_db
-from interfacciaDirigente import InterfacciaDirigente
 from sistemaCaricamento import load_dipendenti, load_turni, load_last_update
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaTurnazione.turnazione import Turnazione
@@ -26,15 +25,11 @@ def main():
     # Caricamento configurazione (eseguito una sola volta all'avvio)
     turnazione.load_configuration()
 
-    # Manteniamo l'istanza dell'interfaccia (o degli strati logici) pronta per quando 
-    # la passeremo alla MainWindow per farla comunicare coi dati.
-    interfaccia = InterfacciaDirigente(sistema_dipendenti, turnazione)
-
     check_update_assenze(sistema_dipendenti)
 
     # --- Avvio dell'Applicazione Desktop PyQt6 ---
     app = QApplication(sys.argv)
-    window = MainWindow(interfaccia)
+    window = MainWindow(sistema_dipendenti, turnazione)
     window.show()
     sys.exit(app.exec())
 

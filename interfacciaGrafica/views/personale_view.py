@@ -184,7 +184,7 @@ class PersonaleView(QWidget):
         
         # --- TABELLA DIPENDENTI ---
         self.table = QTableWidget()
-        headers = ["Nome", "Cognome", "Ferie (gg)", "ROL (h)", "Banca Ore", "Stato", ""]
+        headers = ["Cognome", "Nome", "Ferie (gg)", "ROL (h)", "Banca Ore", "Stato", ""]
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -323,7 +323,7 @@ class PersonaleView(QWidget):
             self.table.insertRow(row)
             
             # Creazione degli item per le colonne testuali con allineamento centrato
-            testo_colonne = [dip.nome, dip.cognome, f"{dip.ferie_rimanenti:.2f}", 
+            testo_colonne = [dip.cognome, dip.nome, f"{dip.ferie_rimanenti:.2f}", 
                              f"{dip.rol_rimanenti:.2f}", f"{dip.banca_ore:.2f}"]
             
             for col, testo in enumerate(testo_colonne):

@@ -13,11 +13,14 @@ from interfacciaGrafica.views.impostazioni_view import ImpostazioniView
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, interfaccia):
+    def __init__(self, sistema_dipendenti, turnazione):
         super().__init__()
         
-        # Salviamo l'istanza del backend
-        self.interfaccia = interfaccia
+        # Memorizziamo i sistemi logici
+        self.sistema_dipendenti = sistema_dipendenti
+        self.turnazione = turnazione
+        # Manteniamo il riferimento 'interfaccia' per compatibilità con le sub-viste
+        self.interfaccia = self
         
         self.setWindowTitle("Turnazione Casa Serena")
         self.resize(1024, 768)
