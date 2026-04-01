@@ -14,8 +14,8 @@ class DBManager:
     @classmethod
     def initialize(cls):
         if cls._pool is None and DB_URL:
-            # Min 1 connessione, Max 10 connessioni contemporanee
-            cls._pool = psycopg2.pool.SimpleConnectionPool(1, 10, DB_URL)
+            # Min 1 connessione, Max 20 connessioni contemporanee per gestire UI + Background Threads
+            cls._pool = psycopg2.pool.SimpleConnectionPool(1, 20, DB_URL)
 
     @classmethod
     def get_conn(cls):

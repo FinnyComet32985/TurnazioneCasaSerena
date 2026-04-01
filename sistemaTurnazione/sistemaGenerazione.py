@@ -52,11 +52,14 @@ class SistemaGenerazione:
         
         for dip in candidati:
             # 1. Recency specifica per questo tipo di fascia
-            last_date_str = sistemaSalvataggio.get_data_ultimo_turno(dip.id_dipendente, tipo_fascia.value)
-            if last_date_str:
-                last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+            last_date_raw = sistemaSalvataggio.get_data_ultimo_turno(dip.id_dipendente, tipo_fascia.value)
+            if isinstance(last_date_raw, str):
+                last_date = datetime.strptime(last_date_raw, "%Y-%m-%d").date()
+            elif last_date_raw:
+                # Se è già un oggetto date (comportamento standard di psycopg2)
+                last_date = last_date_raw
             else:
-                last_date = date.min 
+                last_date = date.min
 
             # 2. Analisi sequenza recente (Cosa ha fatto ieri/l'altro ieri?)
             consecutive_count = 0

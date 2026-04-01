@@ -6,7 +6,7 @@ from datetime import date, datetime
 from PyQt6.QtWidgets import QApplication
 from db.database import DBManager
 from db.initDB import init_db
-from sistemaCaricamento import load_dipendenti, load_turni, load_last_update
+from sistemaCaricamento import load_dipendenti, load_initial_turni, load_last_update
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaTurnazione.turnazione import Turnazione
 
@@ -33,13 +33,16 @@ def main():
     try:
         splash.show_message("Caricamento dati personale...")
         sistema_dipendenti = load_dipendenti()
-        splash.show_message("Sincronizzazione turnazione...")
-        turnazione = load_turni(sistema_dipendenti)
+        
+        splash.show_message("Caricamento turnazioni iniziali...")
+        # Carica la settimana corrente, 2 settimane prima e 2 settimane dopo
+        initial_turnations = load_initial_turni(sistema_dipendenti, weeks_before=2, weeks_after=2)
+        turnazione = Turnazione(initial_turnations) # Passa le turnazioni iniziali al costruttore
     except Exception:
         splash.show_message("Inizializzazione nuovo archivio...")
         init_db()
         sistema_dipendenti = SistemaDipendenti()
-        turnazione = Turnazione()
+        turnazione = Turnazione() # Sarà vuota
     
     # Caricamento configurazione
     splash.show_message("Caricamento impostazioni...")

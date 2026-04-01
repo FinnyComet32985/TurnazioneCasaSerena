@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, time
 from typing import List
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaDipendenti.dipendente import Dipendente
+import sistemaCaricamento # Nuovo import
 from sistemaTurnazione.assegnazioneTurno import AssegnazioneTurno
 from sistemaTurnazione.fasciaOraria import FasciaOraria, TipoFascia, StatoFascia
 import sistemaSalvataggio
@@ -55,7 +56,7 @@ class Turnazione:
         self.limiti_piani_fascia = {
             TipoFascia.MATTINA: {0: 3, 1: 3, 2: 1, 'jolly': 0},
             TipoFascia.POMERIGGIO: {0: 2, 1: 2, 2: 1, 'jolly': 1},
-            TipoFascia.NOTTE: {0: 1, 1: 0, 2: 0, 'jolly': 0, 'manual_limit': 2}
+            TipoFascia.NOTTE: {0: 1, 1: 0, 2: 0, 'jolly': 0, 'manual_limit': 2} # Limite manuale per la notte
         }
 
     def load_configuration(self):
@@ -86,43 +87,22 @@ class Turnazione:
             # Calcola il totale per fascia (solo per generazione AI, escludendo i limiti manuali)
             self.limiti_fascia[tf] = sum(v for k, v in self.limiti_piani_fascia[tf].items() if k != 'manual_limit')
     
-    # loading dei turni del DB
-    def ripristina_fascia(self, id_turno: int, data_str: str, tipo_fascia_str: str, stato_str: str):
-        """Ricostruisce l'oggetto FasciaOraria e lo inserisce nella struttura dati corretta."""
-        
-        # Conversione dati
-        # Assumiamo che la data arrivi come stringa "YYYY-MM-DD" dal DB
-        if isinstance(data_str, str):
-            data_turno = datetime.strptime(data_str, "%Y-%m-%d").date()
-        else:
-            data_turno = data_str # Caso in cui sia già oggetto date
-            
-        tipo_fascia = TipoFascia(tipo_fascia_str)
-        stato = StatoFascia(stato_str)
-
-        # Creazione oggetto
-        fascia = FasciaOraria(data_turno, tipo_fascia, assegnazioni=[], stato=stato, id_turno=id_turno)
-
-        # Calcolo chiavi per il dizionario (Anno, Settimana)
-        anno, settimana, _ = data_turno.isocalendar()
+    def load_week_on_demand(self, anno: int, settimana: int, sistema_dipendenti: SistemaDipendenti):
+        """
+        Carica una settimana specifica dal database se non è già presente in memoria.
+        """
         settimana_key = (anno, settimana)
-
-        # Inserimento nella struttura
-        self.turnazioneSettimanale.setdefault(settimana_key, {}).setdefault(data_turno, {})[tipo_fascia] = fascia
-
-    def ripristina_assegnazione(self, id_turno: int, dipendente: Dipendente, piano: int, jolly: bool, turno_breve: bool):
-        """Cerca la fascia oraria corretta tramite ID e aggiunge l'assegnazione."""
-        
-        # Poiché la struttura è organizzata per Data e non per ID, dobbiamo cercare la fascia.
-        # Nota: Questo potrebbe essere lento se ci sono molti dati, ma avviene solo all'avvio.
-        for settimana_dict in self.turnazioneSettimanale.values():
-            for giorno_dict in settimana_dict.values():
-                for fascia in giorno_dict.values():
-                    if getattr(fascia, 'id_turno', None) == id_turno:
-                        assegnazione = AssegnazioneTurno(dipendente, turnoBreve=turno_breve, piano=piano, jolly=jolly)
-                        fascia.ripristina_assegnazione(assegnazione)
-                        return True
-        return False
+        if settimana_key not in self.turnazioneSettimanale:
+            print(f"Caricamento on-demand per settimana {anno}-{settimana}...")
+            loaded_data = sistemaCaricamento.load_turni_for_week(anno, settimana, sistema_dipendenti)
+            if loaded_data:
+                # Unisce i dati caricati nel dizionario principale turnazioneSettimanale
+                self.turnazioneSettimanale.update(loaded_data)
+                print(f"Settimana {anno}-{settimana} caricata con successo.")
+            else:
+                print(f"Nessun dato trovato per la settimana {anno}-{settimana}.")
+        else:
+            print(f"Settimana {anno}-{settimana} già in memoria.")
 
     def get_turnazione_settimana(self, settimana_key: tuple[int, int]) -> dict[date, dict[TipoFascia, FasciaOraria]]:
         return self.turnazioneSettimanale.get(settimana_key, {})

@@ -6,54 +6,41 @@ from sistemaTurnazione.assegnazioneTurno import AssegnazioneTurno
 def save_dipendente(nome, cognome, stato, ferie_rimanenti, rol_rimanenti) -> int:
     connection = DBManager.get_conn()
     cursor = connection.cursor()
-    
-    query = "INSERT INTO dipendente (nome, cognome, ferieRimanenti, rolRimanenti, stato) VALUES (%s, %s, %s, %s, %s) RETURNING idDipendente"
-    cursor.execute(query, (nome, cognome, float(ferie_rimanenti), float(rol_rimanenti), stato))
-    
-    id_generato = cursor.fetchone()[0]
-    connection.commit()
-    cursor.close()
-    DBManager.put_conn(connection)
-    
-    return id_generato
+    try:
+        query = "INSERT INTO dipendente (nome, cognome, ferieRimanenti, rolRimanenti, stato) VALUES (%s, %s, %s, %s, %s) RETURNING idDipendente"
+        cursor.execute(query, (nome, cognome, float(ferie_rimanenti), float(rol_rimanenti), stato))
+        id_generato = cursor.fetchone()[0]
+        connection.commit()
+        return id_generato
+    finally:
+        cursor.close()
+        DBManager.put_conn(connection)
 
 #  licenziamento dipendente
 def remove_dipendente(id_dipendente) -> bool:
     connection = DBManager.get_conn()
     cursor = connection.cursor()
-
-    query = "UPDATE dipendente SET stato = 'LICENZIATO' WHERE idDipendente = %s"
-    cursor.execute(query, (id_dipendente,))
-    
-    connection.commit()
-
-    if cursor.rowcount > 0:
-        res = True
-    else:
-        res = False
-    
-    cursor.close()
-    DBManager.put_conn(connection)
-    return res
+    try:
+        query = "UPDATE dipendente SET stato = 'LICENZIATO' WHERE idDipendente = %s"
+        cursor.execute(query, (id_dipendente,))
+        connection.commit()
+        return cursor.rowcount > 0
+    finally:
+        cursor.close()
+        DBManager.put_conn(connection)
 
 #  riassunzione dipendente
 def riassumi_dipendente(id_dipendente) -> bool:
     connection = DBManager.get_conn()
     cursor = connection.cursor()
-
-    query = "UPDATE dipendente SET stato = 'ASSUNTO' WHERE idDipendente = %s"
-    cursor.execute(query, (id_dipendente,))
-    
-    connection.commit()
-
-    if cursor.rowcount > 0:
-        res = True
-    else:
-        res = False
-    
-    cursor.close()
-    DBManager.put_conn(connection)
-    return res
+    try:
+        query = "UPDATE dipendente SET stato = 'ASSUNTO' WHERE idDipendente = %s"
+        cursor.execute(query, (id_dipendente,))
+        connection.commit()
+        return cursor.rowcount > 0
+    finally:
+        cursor.close()
+        DBManager.put_conn(connection)
 
 #* SISTEMA ASSENZE
 #  salvataggio nuova assenza
@@ -81,24 +68,24 @@ def save_assenza(id_dipendente: int, tipo_assenza: str, data_inizio, data_fine) 
 def save_turno(data_turno, tipo_fascia: str, stato: str) -> int:
     connection = DBManager.get_conn()
     cursor = connection.cursor()
-
-    query = "INSERT INTO turno (dataTurno, fasciaOraria, stato) VALUES (%s, %s, %s) RETURNING idTurno"
     try:
-        cursor.execute(query, (data_turno, tipo_fascia, stato))
-        id_generato = cursor.fetchone()[0]
-        connection.commit()
-        return id_generato
-    except Exception:
-        # Se viola il vincolo UNIQUE, recuperiamo l'ID esistente
-        connection.rollback()
-        query_select = "SELECT idTurno FROM turno WHERE dataTurno = %s AND fasciaOraria = %s"
-        cursor.execute(query_select, (data_turno, tipo_fascia))
-        result = cursor.fetchone()
+        query = "INSERT INTO turno (dataTurno, fasciaOraria, stato) VALUES (%s, %s, %s) RETURNING idTurno"
+        try:
+            cursor.execute(query, (data_turno, tipo_fascia, stato))
+            id_generato = cursor.fetchone()[0]
+            connection.commit()
+            return id_generato
+        except Exception:
+            connection.rollback()
+            query_select = "SELECT idTurno FROM turno WHERE dataTurno = %s AND fasciaOraria = %s"
+            cursor.execute(query_select, (data_turno, tipo_fascia))
+            result = cursor.fetchone()
+            if result:
+                return result[0]
+            return None
+    finally:
         cursor.close()
         DBManager.put_conn(connection)
-        if result:
-            return result[0]
-        return None
 
 def update_stato_turno(id_turno: int, nuovo_stato: str) -> bool:
     connection = DBManager.get_conn()

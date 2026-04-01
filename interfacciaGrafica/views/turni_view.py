@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QTableWidget, QTableWidgetItem, QFileDialog,
     QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog, QCheckBox,
     QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter, QMenu,
-    QProgressDialog, QApplication, QDialogButtonBox
+    QProgressDialog, QApplication, QDialogButtonBox, QWidget
 )
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from PyQt6.QtCore import Qt, QSize, QDate, QRect, pyqtSignal
@@ -18,6 +18,32 @@ from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 # Import del modulo di esportazione
 from sistemaTurnazione.sistemaEsportazione import genera_pdf_settimanale
 from sistemaTurnazione.festivita_util import get_festivita_italiane
+
+from PyQt6.QtCore import QObject, QThread, pyqtSignal # Nuovi import per il threading
+
+class TurnationLoaderWorker(QObject):
+    """
+    Worker per caricare le turnazioni in un thread separato.
+    """
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+    week_loaded = pyqtSignal(tuple) # Emette (anno, settimana) della settimana caricata
+
+    def __init__(self, turnazione_system, sistema_dipendenti, anno, settimana):
+        super().__init__()
+        self.turnazione_system = turnazione_system
+        self.sistema_dipendenti = sistema_dipendenti
+        self.anno = anno
+        self.settimana = settimana
+
+    def run(self):
+        try:
+            self.turnazione_system.load_week_on_demand(self.anno, self.settimana, self.sistema_dipendenti)
+            self.week_loaded.emit((self.anno, self.settimana))
+        except Exception as e:
+            self.error.emit(f"Errore durante il caricamento della settimana {self.anno}-{self.settimana}: {str(e)}")
+        finally:
+            self.finished.emit()
 
 class NottiExtraDialog(QDialog):
     def __init__(self, start_date: date, notti_esistenti: list, parent=None):
@@ -607,6 +633,9 @@ class TurniView(QWidget):
         self.current_monday = today - timedelta(days=today.weekday())
         self.holidays = set()
         
+        self.loading_thread = None # Per gestire il thread di caricamento
+        self.loading_worker = None # Per gestire il worker del thread
+
         self.init_ui()
         
     def init_ui(self):
@@ -645,6 +674,7 @@ class TurniView(QWidget):
         btn_prev.setFixedSize(40, 40)
         btn_prev.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_prev.setStyleSheet("QPushButton { border: 1px solid #cbd5e1; border-radius: 20px; background-color: white; } QPushButton:hover { background-color: #f1f5f9; }")
+        self.btn_prev = btn_prev # Rendi accessibile per show_loading_indicator
         btn_prev.clicked.connect(self.prev_week)
         
         # Label Centrale (Cliccabile)
@@ -664,12 +694,14 @@ class TurniView(QWidget):
             QPushButton:hover { background-color: #f8fafc; border-color: #94a3b8; }
         """)
         self.lbl_week_range.clicked.connect(self.open_week_selector)
+        self.lbl_week_range = self.lbl_week_range # Rendi accessibile per show_loading_indicator
         
         # Bottone Avanti
         btn_next = QPushButton()
         btn_next.setIcon(QIcon(resource_path("interfacciaGrafica/assets/arrow-forward.svg")))
         btn_next.setFixedSize(40, 40)
         btn_next.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_next = btn_next # Rendi accessibile per show_loading_indicator
         btn_next.setStyleSheet("QPushButton { border: 1px solid #cbd5e1; border-radius: 20px; background-color: white; } QPushButton:hover { background-color: #f1f5f9; }")
         btn_next.clicked.connect(self.next_week)
         
@@ -678,6 +710,7 @@ class TurniView(QWidget):
         self.btn_today.setIcon(self.get_colored_icon(resource_path("interfacciaGrafica/assets/calendar-number.svg"), "#3b82f6")) # Blu
         self.btn_today.setIconSize(QSize(20, 20))
         self.btn_today.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_today = self.btn_today # Rendi accessibile per show_loading_indicator
         self.btn_today.setFixedHeight(40)
         self.btn_today.setFixedWidth(100)
         self.btn_today.clicked.connect(self.go_today)
@@ -734,26 +767,32 @@ class TurniView(QWidget):
         self.btn_genera.setIcon(self.get_colored_icon(resource_path("interfacciaGrafica/assets/sparkles.svg"), "#5b21b6"))
         self.btn_genera.setIconSize(QSize(20, 20))
         self.btn_genera.setStyleSheet(genera_style)
+        self.btn_genera = self.btn_genera # Rendi accessibile per show_loading_indicator
         
         self.btn_modifica = QPushButton(" Riapri Settimana")
         self.btn_modifica.setIcon(self.get_colored_icon(resource_path("interfacciaGrafica/assets/lock-open.svg"), "#c2410c"))
         self.btn_modifica.setIconSize(QSize(20, 20))
         self.btn_modifica.setStyleSheet(reopen_style)
+        self.btn_modifica = self.btn_modifica # Rendi accessibile per show_loading_indicator
         
         self.btn_approva = QPushButton(" Approva")
         self.btn_approva.setIcon(self.get_colored_icon(resource_path("interfacciaGrafica/assets/checkbox.svg"), "#166534"))
         self.btn_approva.setIconSize(QSize(20, 20))
+        self.btn_approva = self.btn_approva # Rendi accessibile per show_loading_indicator
+
         self.btn_svuota = QPushButton(" Svuota")
         self.btn_svuota.setIcon(self.get_colored_icon(resource_path("interfacciaGrafica/assets/trash-bin.svg"), "#991b1b"))
         self.btn_svuota.setIconSize(QSize(20, 20))
+        self.btn_svuota = self.btn_svuota # Rendi accessibile per show_loading_indicator
+
         self.btn_pdf = QPushButton(" Esporta")
         self.btn_pdf.setIcon(self.get_colored_icon(resource_path("interfacciaGrafica/assets/document-attach.svg"), "#334155"))
         self.btn_pdf.setIconSize(QSize(20, 20))
+        self.btn_pdf = self.btn_pdf # Rendi accessibile per show_loading_indicator
         
         self.btn_approva.setStyleSheet(approve_style)
         self.btn_svuota.setStyleSheet(svuota_style)
         self.btn_pdf.setStyleSheet(btn_style_header)
-
         self.btn_genera.clicked.connect(self.genera_turni_auto)
         self.btn_approva.clicked.connect(self.approva_settimana_ui)
         self.btn_modifica.clicked.connect(self.riapri_settimana_ui)
@@ -1027,35 +1066,98 @@ class TurniView(QWidget):
         layout.addWidget(self.body_container, stretch=1)
         
         self.aggiorna_tabella()
+
+    def trigger_week_load_and_update(self):
+        """
+        Controlla se la settimana corrente è caricata e, in caso contrario, la carica in background.
+        Poi aggiorna la UI.
+        """
+        anno, settimana, _ = self.current_monday.isocalendar()
+        settimana_key = (anno, settimana)
+
+        if settimana_key not in self.interfaccia.turnazione.turnazioneSettimanale:
+            self.show_loading_indicator(True)
+            
+            if self.loading_thread and self.loading_thread.isRunning():
+                print("Caricamento precedente in corso, ignorando la nuova richiesta.")
+                return
+
+            self.loading_thread = QThread()
+            self.loading_worker = TurnationLoaderWorker(
+                self.interfaccia.turnazione,
+                self.interfaccia.sistema_dipendenti,
+                anno,
+                settimana
+            )
+            self.loading_worker.moveToThread(self.loading_thread)
+
+            self.loading_thread.started.connect(self.loading_worker.run)
+            self.loading_worker.finished.connect(self.loading_thread.quit)
+            self.loading_worker.finished.connect(self.loading_worker.deleteLater)
+            
+            self.loading_worker.week_loaded.connect(self.on_week_loaded)
+            self.loading_worker.error.connect(self.on_loading_error)
+
+            self.loading_thread.start()
+        else:
+            self.aggiorna_tabella()
+
+    def on_week_loaded(self, settimana_key):
+        """Slot chiamato quando una settimana è stata caricata in background."""
+        print(f"UI: Settimana {settimana_key} caricata in background, aggiornamento tabella.")
+        self.show_loading_indicator(False)
+        self.aggiorna_tabella() # Aggiorna la UI con i dati appena caricati
+
+    def on_loading_error(self, message):
+        """Slot chiamato in caso di errore durante il caricamento in background."""
+        QMessageBox.critical(self, "Errore di Caricamento", message)
+        self.show_loading_indicator(False)
+        self.aggiorna_tabella() # Tenta comunque di aggiornare, magari mostra lo stato vuoto
+
+    def show_loading_indicator(self, show: bool):
+        """Mostra/nasconde un indicatore di caricamento e disabilita/abilita i controlli."""
+        self.table.setEnabled(not show)
+        self.btn_prev.setEnabled(not show)
+        self.btn_next.setEnabled(not show)
+        self.lbl_week_range.setEnabled(not show)
+        self.btn_today.setEnabled(not show)
+        self.btn_genera.setEnabled(not show)
+        self.btn_modifica.setEnabled(not show)
+        self.btn_approva.setEnabled(not show)
+        self.btn_svuota.setEnabled(not show)
+        self.btn_pdf.setEnabled(not show)
+
+        if show: print("Caricamento settimana in background...")
+        else: print("Caricamento background completato.")
         
     def showEvent(self, event):
         """Ricarica i dati ogni volta che la vista viene visualizzata."""
         super().showEvent(event)
-        self.aggiorna_tabella()
+        self.trigger_week_load_and_update()
 
     def vai_a_data(self, target_date: date):
         """Sposta la visualizzazione alla settimana della data specificata."""
         self.current_monday = target_date - timedelta(days=target_date.weekday())
-        self.aggiorna_tabella()
+        self.trigger_week_load_and_update()
 
     def prev_week(self):
         self.current_monday -= timedelta(weeks=1)
-        self.aggiorna_tabella()
+        self.trigger_week_load_and_update()
 
     def next_week(self):
         self.current_monday += timedelta(weeks=1)
-        self.aggiorna_tabella()
+        self.trigger_week_load_and_update()
 
     def go_today(self):
         today = date.today()
         self.current_monday = today - timedelta(days=today.weekday())
-        self.aggiorna_tabella()
+        self.trigger_week_load_and_update()
 
     def open_week_selector(self):
         dialog = WeekSelectorDialog(self.current_monday, self)
         if dialog.exec():
             self.current_monday = dialog.selected_date
-            self.aggiorna_tabella()
+            self.trigger_week_load_and_update()
 
     def update_header_ui(self):
         # Aggiorna label range
