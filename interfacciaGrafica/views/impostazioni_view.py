@@ -1,3 +1,4 @@
+from path_util import resource_path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
     QPushButton, QFormLayout, QScrollArea, QMessageBox, QFrame, QGridLayout
@@ -37,7 +38,7 @@ class ImpostazioniView(QWidget):
         header_layout.addStretch()
 
         self.btn_save = QPushButton("  Salva Configurazioni")
-        self.btn_save.setIcon(QIcon("./interfacciaGrafica/assets/save.svg"))
+        self.btn_save.setIcon(QIcon(resource_path("interfacciaGrafica/assets/save.svg")))
         self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.setFixedWidth(220)
         self.btn_save.setStyleSheet("""

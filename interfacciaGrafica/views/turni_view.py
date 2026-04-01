@@ -1,3 +1,4 @@
+from path_util import resource_path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout,
     QPushButton, QTableWidget, QTableWidgetItem, QFileDialog,
@@ -396,15 +397,15 @@ class DipendentePill(QFrame):
         """)
         
         highlight_text = "Rimuovi Evidenzia" if self.is_highlighted else "Evidenzia Turni"
-        highlight_icon = "./interfacciaGrafica/assets/eye-off.svg" if self.is_highlighted else "./interfacciaGrafica/assets/eye.svg"
+        highlight_icon = "interfacciaGrafica/assets/eye-off.svg" if self.is_highlighted else "interfacciaGrafica/assets/eye.svg"
         highlight_action = menu.addAction(highlight_text)
         highlight_action.setIcon(self.get_colored_icon(highlight_icon, "#3b82f6"))
         
         edit_action = menu.addAction("Modifica")
-        edit_action.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/pencil.svg", "#000000"))
+        edit_action.setIcon(self.get_colored_icon("interfacciaGrafica/assets/pencil.svg", "#000000"))
         
         delete_action = menu.addAction("Elimina")
-        delete_action.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
+        delete_action.setIcon(self.get_colored_icon("interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
         
         action = menu.exec(self.mapToGlobal(pos))
         if action == edit_action:
@@ -415,7 +416,7 @@ class DipendentePill(QFrame):
             self.deleteRequested.emit(self.assegnazione.dipendente.id_dipendente)
 
     def get_colored_icon(self, icon_path, color_hex):
-        pixmap = QPixmap(icon_path)
+        pixmap = QPixmap(resource_path(icon_path))
         if pixmap.isNull(): return QIcon()
         painter = QPainter(pixmap)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
@@ -554,7 +555,7 @@ class ShiftHeaderView(QHeaderView):
             
             # 1. Icona
             icon_size = 24
-            pix = QPixmap(f"./interfacciaGrafica/assets/{icon_name}")
+            pix = QPixmap(resource_path(f"interfacciaGrafica/assets/{icon_name}"))
             if not pix.isNull():
                 # Ricolora
                 colored_pix = QPixmap(pix.size())
@@ -640,7 +641,7 @@ class TurniView(QWidget):
 
         # Bottone Indietro
         btn_prev = QPushButton()
-        btn_prev.setIcon(QIcon("./interfacciaGrafica/assets/arrow-back.svg"))
+        btn_prev.setIcon(QIcon(resource_path("interfacciaGrafica/assets/arrow-back.svg")))
         btn_prev.setFixedSize(40, 40)
         btn_prev.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_prev.setStyleSheet("QPushButton { border: 1px solid #cbd5e1; border-radius: 20px; background-color: white; } QPushButton:hover { background-color: #f1f5f9; }")
@@ -666,7 +667,7 @@ class TurniView(QWidget):
         
         # Bottone Avanti
         btn_next = QPushButton()
-        btn_next.setIcon(QIcon("./interfacciaGrafica/assets/arrow-forward.svg"))
+        btn_next.setIcon(QIcon(resource_path("interfacciaGrafica/assets/arrow-forward.svg")))
         btn_next.setFixedSize(40, 40)
         btn_next.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_next.setStyleSheet("QPushButton { border: 1px solid #cbd5e1; border-radius: 20px; background-color: white; } QPushButton:hover { background-color: #f1f5f9; }")
@@ -674,7 +675,7 @@ class TurniView(QWidget):
         
         # Bottone Oggi
         self.btn_today = QPushButton(" Oggi")
-        self.btn_today.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/calendar-number.svg", "#3b82f6")) # Blu
+        self.btn_today.setIcon(self.get_colored_icon("interfacciaGrafica/assets/calendar-number.svg", "#3b82f6")) # Blu
         self.btn_today.setIconSize(QSize(20, 20))
         self.btn_today.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_today.setFixedHeight(40)
@@ -730,23 +731,23 @@ class TurniView(QWidget):
             QPushButton:hover { background-color: #fee2e2; border-color: #fca5a5; }
         """
         self.btn_genera = QPushButton(" Genera")
-        self.btn_genera.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/sparkles.svg", "#5b21b6"))
+        self.btn_genera.setIcon(self.get_colored_icon("interfacciaGrafica/assets/sparkles.svg", "#5b21b6"))
         self.btn_genera.setIconSize(QSize(20, 20))
         self.btn_genera.setStyleSheet(genera_style)
         
         self.btn_modifica = QPushButton(" Riapri Settimana")
-        self.btn_modifica.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/lock-open.svg", "#c2410c"))
+        self.btn_modifica.setIcon(self.get_colored_icon("interfacciaGrafica/assets/lock-open.svg", "#c2410c"))
         self.btn_modifica.setIconSize(QSize(20, 20))
         self.btn_modifica.setStyleSheet(reopen_style)
         
         self.btn_approva = QPushButton(" Approva")
-        self.btn_approva.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/checkbox.svg", "#166534"))
+        self.btn_approva.setIcon(self.get_colored_icon("interfacciaGrafica/assets/checkbox.svg", "#166534"))
         self.btn_approva.setIconSize(QSize(20, 20))
         self.btn_svuota = QPushButton(" Svuota")
-        self.btn_svuota.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/trash-bin.svg", "#991b1b"))
+        self.btn_svuota.setIcon(self.get_colored_icon("interfacciaGrafica/assets/trash-bin.svg", "#991b1b"))
         self.btn_svuota.setIconSize(QSize(20, 20))
         self.btn_pdf = QPushButton(" Esporta")
-        self.btn_pdf.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/document-attach.svg", "#334155"))
+        self.btn_pdf.setIcon(self.get_colored_icon("interfacciaGrafica/assets/document-attach.svg", "#334155"))
         self.btn_pdf.setIconSize(QSize(20, 20))
         
         self.btn_approva.setStyleSheet(approve_style)
@@ -799,10 +800,10 @@ class TurniView(QWidget):
         
         # Icona (Pie chart statica o simile, usiamo una variante colorata)
         icon_chart = QLabel()
-        pix_p = QPixmap("./interfacciaGrafica/assets/pie-chart.svg") # Fallback o nuova icona
+        pix_p = QPixmap(resource_path("interfacciaGrafica/assets/pie-chart.svg")) # Fallback o nuova icona
         # Se non hai pie-chart usa quella esistente o un placeholder, qui riuso una generica
         if pix_p.isNull():
-             pix_p = QPixmap("./interfacciaGrafica/assets/options.svg") # Placeholder
+             pix_p = QPixmap(resource_path("interfacciaGrafica/assets/options.svg")) # Placeholder
 
         if not pix_p.isNull():
             painter = QPainter(pix_p)
@@ -994,10 +995,10 @@ class TurniView(QWidget):
         empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         btn_genera = QPushButton(" Genera Turni (A.I.)")
-        btn_genera.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/sparkles.svg", "#ffffff"))
+        btn_genera.setIcon(self.get_colored_icon("interfacciaGrafica/assets/sparkles.svg", "#ffffff"))
         btn_genera.setIconSize(QSize(20, 20))
         btn_crea_zero = QPushButton(" Crea da zero")
-        btn_crea_zero.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/document.svg", "#ffffff"))
+        btn_crea_zero.setIcon(self.get_colored_icon("interfacciaGrafica/assets/document.svg", "#ffffff"))
         btn_crea_zero.setIconSize(QSize(20, 20))
         btn_genera.setFixedWidth(250)
         btn_crea_zero.setFixedWidth(250)
@@ -1073,11 +1074,11 @@ class TurniView(QWidget):
         this_monday = today - timedelta(days=today.weekday())
         if self.current_monday == this_monday:
              self.btn_today.setStyleSheet("background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; font-weight: bold; border-radius: 8px;")
-             self.btn_today.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/calendar-number.svg", "#3b82f6")) # Blu acceso anche se disabilitato
+             self.btn_today.setIcon(self.get_colored_icon("interfacciaGrafica/assets/calendar-number.svg", "#3b82f6")) # Blu acceso anche se disabilitato
              self.btn_today.setEnabled(False)
         else:
              self.btn_today.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; font-weight: normal; border-radius: 8px;")
-             self.btn_today.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/calendar-number.svg", "#3b82f6"))
+             self.btn_today.setIcon(self.get_colored_icon("interfacciaGrafica/assets/calendar-number.svg", "#3b82f6"))
              self.btn_today.setEnabled(True)
 
         # Controllo stato approvazione per pulsanti
@@ -1298,7 +1299,7 @@ class TurniView(QWidget):
         badge_layout.setSpacing(5)
         
         icon = QLabel()
-        pix = QPixmap("./interfacciaGrafica/assets/information-circle.svg")
+        pix = QPixmap(resource_path("interfacciaGrafica/assets/information-circle.svg"))
         p = QPainter(pix)
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
         p.fillRect(pix.rect(), QColor("#3b82f6"))
@@ -1747,7 +1748,7 @@ class TurniView(QWidget):
 
     def get_colored_icon(self, icon_path, color_hex):
         """Ricolora un'icona SVG/PNG usando QPainter"""
-        pixmap = QPixmap(icon_path)
+        pixmap = QPixmap(resource_path(icon_path))
         if pixmap.isNull():
             return QIcon()
         painter = QPainter(pixmap)
