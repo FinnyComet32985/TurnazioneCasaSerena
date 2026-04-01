@@ -24,6 +24,7 @@ class MainWindow(QMainWindow):
         self.interfaccia = self
         
         self.setWindowTitle("Turnazione Casa Serena")
+        self.setWindowIcon(QIcon(resource_path("app_icon.ico")))
         self.resize(1024, 768)
         
         self.init_ui()

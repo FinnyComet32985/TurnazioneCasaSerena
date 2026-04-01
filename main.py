@@ -1,6 +1,7 @@
 import sys
 import os
 import calendar
+import ctypes
 from datetime import date, datetime
 from PyQt6.QtWidgets import QApplication
 from db.database import DBManager
@@ -11,26 +12,47 @@ from sistemaTurnazione.turnazione import Turnazione
 
 import sistemaSalvataggio
 from interfacciaGrafica.main_window import MainWindow
+from interfacciaGrafica.loading_screen import LoadingScreen
 
 def main():
+    # Fix per mostrare l'icona corretta nella barra delle applicazioni su Windows
+    if sys.platform == 'win32':
+        myappid = 'casaserena.turnazione.v1' # Stringa univoca arbitraria
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+    # Avviamo QApplication prima dei caricamenti per poter mostrare la finestra di caricamento
+    app = QApplication(sys.argv)
+    
+    # Mostra lo splash screen
+    splash = LoadingScreen()
+    splash.show()
+
+    splash.show_message("Connessione al database...")
     DBManager.initialize()
 
     try:
+        splash.show_message("Caricamento dati personale...")
         sistema_dipendenti = load_dipendenti()
+        splash.show_message("Sincronizzazione turnazione...")
         turnazione = load_turni(sistema_dipendenti)
     except Exception:
+        splash.show_message("Inizializzazione nuovo archivio...")
         init_db()
         sistema_dipendenti = SistemaDipendenti()
         turnazione = Turnazione()
     
-    # Caricamento configurazione (eseguito una sola volta all'avvio)
+    # Caricamento configurazione
+    splash.show_message("Caricamento impostazioni...")
     turnazione.load_configuration()
 
+    splash.show_message("Aggiornamento ratei e assenze...")
     check_update_assenze(sistema_dipendenti)
 
-    # --- Avvio dell'Applicazione Desktop PyQt6 ---
-    app = QApplication(sys.argv)
+    splash.show_message("Avvio interfaccia grafica...")
     window = MainWindow(sistema_dipendenti, turnazione)
+    
+    # Chiude lo splash screen quando la finestra principale è pronta
+    splash.finish(window)
     window.show()
     sys.exit(app.exec())
 
