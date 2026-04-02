@@ -39,7 +39,11 @@ class FasciaOraria:
         if stato is not None:
             self.stato = stato
     
-    def add_assegnazione(self, assegnazione: AssegnazioneTurno):
+    def add_assegnazione(self, assegnazione: AssegnazioneTurno, commit: bool = True):
+        """
+        Aggiunge un'assegnazione. 
+        Se commit=False, la aggiunge solo in memoria (usato per generazioni batch).
+        """
         # VINCOLO: massimo numero oss per turno
         if self.tipo == TipoFascia.MATTINA and len(self.assegnazioni) >=7:
             print("Errore: nel turno sono già presenti 7 oss")
@@ -63,11 +67,13 @@ class FasciaOraria:
                     print(f"Errore: Limite raggiunto. È già presente un turno breve assegnato a {a.dipendente.nome} {a.dipendente.cognome}.")
                     return False
 
-        # Verifichiamo che la fascia oraria abbia un ID (sia salvata su DB) prima di salvare l'assegnazione
-        if getattr(self, 'id_turno', None) is None:
-            return False
-            
-        result = sistemaSalvataggio.save_assegnazione(self.id_turno, assegnazione)
+        result = True
+        if commit:
+            # Verifichiamo che la fascia oraria abbia un ID prima di salvare
+            if getattr(self, 'id_turno', None) is None:
+                return False
+            result = sistemaSalvataggio.save_assegnazione(self.id_turno, assegnazione)
+        
         if result:
             self.assegnazioni.append(assegnazione)
             return True

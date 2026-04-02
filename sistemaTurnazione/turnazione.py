@@ -114,13 +114,23 @@ class Turnazione:
         try:
             # Calcola il primo giorno (Lunedì) della settimana ISO
             primo_giorno = date.fromisocalendar(anno, settimana, 1)
-            
+            turni_to_create = []
+
+            # Prepariamo i dati per il batch insert (M, P, N + RIPOSO per ogni giorno)
             for i in range(7):
                 giorno_corrente = primo_giorno + timedelta(days=i)
-                # Creiamo le 3 fasce principali (il RIPOSO è un concetto assegnato al dipendente, non un turno lavorativo generato)
-                self.add_turno(giorno_corrente, TipoFascia.MATTINA, StatoFascia.GENERATA)
-                self.add_turno(giorno_corrente, TipoFascia.POMERIGGIO, StatoFascia.GENERATA)
-                self.add_turno(giorno_corrente, TipoFascia.NOTTE, StatoFascia.GENERATA)
+                for tf in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE, TipoFascia.RIPOSO]:
+                    turni_to_create.append((giorno_corrente, tf.value, StatoFascia.GENERATA.value))
+            
+            # Eseguiamo il salvataggio massivo
+            created_ids = sistemaSalvataggio.save_turni_batch(turni_to_create)
+            
+            # Popoliamo la memoria con gli oggetti FasciaOraria dotati di ID reale
+            for id_t, dt, tf_val in created_ids:
+                tf = TipoFascia(tf_val)
+                fascia = FasciaOraria(dt, tf, stato=StatoFascia.GENERATA, id_turno=id_t)
+                self.turnazioneSettimanale.setdefault((anno, settimana), {}).setdefault(dt, {})[tf] = fascia
+                
             return True
         except Exception as e:
             print(f"Errore inizializzazione settimana: {e}")
@@ -570,7 +580,7 @@ class Turnazione:
             
         return candidati
 
-    def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False, stato: StatoFascia = StatoFascia.CREATO) -> bool:
+    def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False, stato: StatoFascia = StatoFascia.CREATO, commit: bool = True) -> bool:
         """Cerca la fascia specifica e aggiunge l'assegnazione (che salva su DB)."""
         anno, settimana, _ = data_turno.isocalendar()
         settimana_key = (anno, settimana)
@@ -601,7 +611,7 @@ class Turnazione:
 
         # Early return per i turni di RIPOSO per evitare check inutili
         if tipo_fascia == TipoFascia.RIPOSO:
-            esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=False, piano=None, jolly=False))
+            esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=False, piano=None, jolly=False), commit=commit)
             return esito
 
         # Controllo: Massimo 1 NOTTE per settimana (Avviso non bloccante)
@@ -649,12 +659,12 @@ class Turnazione:
 
         # Se tutti i controlli passano, procediamo con l'assegnazione reale
         # L'assegnazione chiama database che se bloccata (es per Trigger Assenze) restituirà False
-        esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly))
+        esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly), commit=commit)
         if not esito:
             raise ValueError("Assegnazione bloccata dal database. Il dipendente potrebbe essere in Ferie/Malattia in questa data.")
 
         # Se non è un automatismo di RIPOSO, impostiamo lo stato (default CREATO per manuale)
-        if esito and tipo_fascia != TipoFascia.RIPOSO:
+        if esito and tipo_fascia != TipoFascia.RIPOSO and commit:
             fascia.stato = stato
             sistemaSalvataggio.update_stato_turno(fascia.id_turno, stato.value)
 
@@ -671,9 +681,9 @@ class Turnazione:
                 if len(settimana_dict) < 7:
                     self.inizializza_settimana(anno_r, sett_r)
                     
-                if self.add_turno(giorno_riposo, TipoFascia.RIPOSO, StatoFascia.CREATO):
+                if self.add_turno(giorno_riposo, TipoFascia.RIPOSO, StatoFascia.CREATO): # Nota: add_turno è già relativamente veloce
                     try:
-                        self.assegna_turno(sistema_dipendenti, id_dipendente, giorno_riposo, TipoFascia.RIPOSO, piano=None)
+                        self.assegna_turno(sistema_dipendenti, id_dipendente, giorno_riposo, TipoFascia.RIPOSO, piano=None, commit=commit)
                         desc_riposo = "smontante" if giorno_riposo == data_domani else "riposo"
                         print(f"Assegnazione automatica turno RIPOSO ({desc_riposo}) per {dipendente_obj.nome} {dipendente_obj.cognome} il {giorno_riposo}")
                     except ValueError as e:
@@ -798,7 +808,7 @@ class Turnazione:
             print("Errore durante lo svuotamento della settimana.")
             return False
 
-    def riempi_riposi_settimana(self, sistema_dipendenti: SistemaDipendenti, settimana_key: tuple[int, int]):
+    def riempi_riposi_settimana(self, sistema_dipendenti: SistemaDipendenti, settimana_key: tuple[int, int], commit: bool = True):
         """
         1. Assicura che ogni giorno della settimana abbia una fascia RIPOSO.
         2. Assegna RIPOSO a tutti i dipendenti che non hanno un turno o un'assenza.
@@ -831,7 +841,7 @@ class Turnazione:
                     if not sistema_dipendenti.verifica_assenza(dip.id_dipendente, giorno):
                         try:
                             # Nota: assegna_turno gestisce anche la creazione del turno su DB se necessario via fascia.add_assegnazione
-                            self.assegna_turno(sistema_dipendenti, dip.id_dipendente, giorno, TipoFascia.RIPOSO, stato=StatoFascia.GENERATA)
+                            self.assegna_turno(sistema_dipendenti, dip.id_dipendente, giorno, TipoFascia.RIPOSO, stato=StatoFascia.GENERATA, commit=commit)
                         except ValueError:
                             continue
 

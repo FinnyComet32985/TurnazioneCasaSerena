@@ -1295,6 +1295,14 @@ class TurniView(QWidget):
              lbl_none.setAlignment(Qt.AlignmentFlag.AlignCenter)
              self.abs_layout.addWidget(lbl_none)
 
+    def _get_dipendente_display_name(self, dipendente):
+        """Restituisce il cognome e l'iniziale del nome solo se necessario (omonimie)."""
+        dipendenti_attivi = [d for d in self.interfaccia.sistema_dipendenti.get_lista_dipendenti() if d.stato == StatoDipendente.ASSUNTO]
+        cognomi_attivi = [d.cognome for d in dipendenti_attivi]
+        if cognomi_attivi.count(dipendente.cognome) > 1:
+             return f"{dipendente.cognome} {dipendente.nome[0]}."
+        return dipendente.cognome
+
     def create_absence_item(self, dip, ass, start, end):
         item = QWidget()
         item.setStyleSheet("background-color: transparent;")
@@ -1302,7 +1310,7 @@ class TurniView(QWidget):
         h_layout.setContentsMargins(0, 0, 0, 0)
         h_layout.setSpacing(10)
         
-        lbl_name = QLabel(f"{dip.nome} {dip.cognome}") 
+        lbl_name = QLabel(self._get_dipendente_display_name(dip)) 
         lbl_name.setStyleSheet("font-weight: 600; color: #334155;") 
         
         tipo = TipoAssenza(ass.tipo)
@@ -1456,7 +1464,8 @@ class TurniView(QWidget):
         layout.setContentsMargins(0,0,0,0)
         layout.setSpacing(10)
         
-        lbl_name = QLabel(f"<b>{dip.nome} {dip.cognome}</b>")
+        nome_display = self._get_dipendente_display_name(dip)
+        lbl_name = QLabel(f"<b>{nome_display}</b>")
         lbl_name.setStyleSheet("color: #334155;")
         layout.addWidget(lbl_name)
         

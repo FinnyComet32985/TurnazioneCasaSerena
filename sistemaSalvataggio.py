@@ -1,4 +1,5 @@
 from db.database import DBManager
+from psycopg2 import extras # Per operazioni batch efficienti
 from sistemaTurnazione.assegnazioneTurno import AssegnazioneTurno
 
 #* SISTEMA DIPENDENTI
@@ -83,6 +84,51 @@ def save_turno(data_turno, tipo_fascia: str, stato: str) -> int:
             if result:
                 return result[0]
             return None
+    finally:
+        cursor.close()
+        DBManager.put_conn(connection)
+
+def save_turni_batch(turni_data: list) -> list:
+    """
+    Crea o recupera ID per più turni contemporaneamente.
+    turni_data: list di tuple (dataTurno, fasciaOraria, stato)
+    Ritorna: list di tuple (idTurno, dataTurno, fasciaOraria)
+    """
+    connection = DBManager.get_conn()
+    cursor = connection.cursor()
+    try:
+        # Usiamo ON CONFLICT per gestire turni esistenti e RETURNING per gli ID
+        query = """
+            INSERT INTO turno (dataTurno, fasciaOraria, stato) 
+            VALUES %s 
+            ON CONFLICT (dataTurno, fasciaOraria) DO UPDATE SET stato = EXCLUDED.stato
+            RETURNING idTurno, dataTurno, fasciaOraria
+        """
+        extras.execute_values(cursor, query, turni_data)
+        results = cursor.fetchall()
+        connection.commit()
+        return results
+    finally:
+        cursor.close()
+        DBManager.put_conn(connection)
+
+def save_assegnazioni_batch(data: list) -> bool:
+    """
+    Salva una lista di assegnazioni in un'unica transazione.
+    data: list di tuple (idDipendente, idTurno, piano, jolly, turnoBreve)
+    """
+    if not data: return True
+    connection = DBManager.get_conn()
+    cursor = connection.cursor()
+    try:
+        query = "INSERT INTO lavora (idDipendente, idTurno, piano, jolly, turnoBreve) VALUES %s"
+        extras.execute_values(cursor, query, data)
+        connection.commit()
+        return True
+    except Exception as e:
+        print(f"ERRORE BATCH ASSEGNAZIONI (Trigger violation?): {e}")
+        connection.rollback()
+        return False
     finally:
         cursor.close()
         DBManager.put_conn(connection)
@@ -296,7 +342,7 @@ def reset_settimana(data_inizio: str, data_fine: str) -> bool:
         DELETE FROM lavora 
         WHERE idTurno IN (
             SELECT idTurno FROM turno 
-            WHERE dataTurno >= ? AND dataTurno <= ?
+            WHERE dataTurno >= %s AND dataTurno <= %s
         )
         AND NOT EXISTS (
             SELECT 1 FROM turno t_curr

@@ -243,7 +243,8 @@ class SistemaGenerazione:
                                     tipo_fascia, 
                                     piano=piano_slot if genera_piani else 0, 
                                     jolly=is_jolly_slot if genera_piani else False,
-                                    stato=StatoFascia.GENERATA
+                                    stato=StatoFascia.GENERATA,
+                                    commit=False # In memoria durante la generazione
                                 )
                                 count_attuale += 1
                                 assigned = True
@@ -255,17 +256,37 @@ class SistemaGenerazione:
                             print(f"WARNING: Impossibile trovare candidati validi per {tipo_fascia.value} del {giorno}. (Slot {count_attuale+1}/{target_operatori})")
                             break # Esce dal while per evitare loop infinito su questo slot, passa al prossimo turno
         
-        self._assegna_riposi_mancanti(anno, settimana)
+        self._assegna_riposi_mancanti(anno, settimana, commit=False)
 
         # Post-Processing: Turni Brevi
         self._applica_turni_brevi(anno, settimana)
         
+        # --- COMMIT FINALE BATCH ---
+        print("--- Salvataggio massivo su Database ---")
+        pending_assignments = []
+        settimana_dict = self.turnazione.turnazioneSettimanale.get((anno, settimana), {})
+        for giorno_dict in settimana_dict.values():
+            for fascia in giorno_dict.values():
+                for ass in fascia.assegnazioni:
+                    # Esportiamo solo l'essenziale per il DB
+                    pending_assignments.append((
+                        ass.dipendente.id_dipendente,
+                        fascia.id_turno,
+                        ass.piano,
+                        ass.jolly,
+                        ass.turnoBreve
+                    ))
+        
+        if not sistemaSalvataggio.save_assegnazioni_batch(pending_assignments):
+            print("ERRORE CRITICO: Il salvataggio batch è fallito. I vincoli del database sono stati violati.")
+            return False
+
         print("--- Generazione Completata ---")
         return True
 
-    def _assegna_riposi_mancanti(self, anno: int, settimana: int):
+    def _assegna_riposi_mancanti(self, anno: int, settimana: int, commit: bool = True):
         """
         Post-processing: Delega al metodo centralizzato di riempimento riposi.
         """
         print("--- Assegnazione Riposi Mancanti ---")
-        self.turnazione.riempi_riposi_settimana(self.sistema_dipendenti, (anno, settimana))
+        self.turnazione.riempi_riposi_settimana(self.sistema_dipendenti, (anno, settimana), commit=commit)
