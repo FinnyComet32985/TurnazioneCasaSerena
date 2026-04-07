@@ -1,3 +1,8 @@
 /db/turnazione.db
 /mockup/
 .env
+/build/
+/dist/
+TurnazioneCasaSerena.spec
+__pycache__/*
+*/__pycache__
