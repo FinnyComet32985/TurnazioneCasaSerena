@@ -333,7 +333,7 @@ class DettaglioDipendenteView(QWidget):
         self.lbl_avatar.setText(initials)
         self.lbl_avatar.setStyleSheet("background-color: #eff6ff; color: #2563eb; border-radius: 12px; font-size: 32px; font-weight: bold; border: 1px solid #dbeafe;")
         
-        self.lbl_nome_cognome.setText(f"{dip.nome} {dip.cognome}")
+        self.lbl_nome_cognome.setText(f"{dip.cognome} {dip.nome}")
         self.lbl_matricola.setText(f"ID: {str(dip.id_dipendente).zfill(5)}")
         
         # Update the status on the right side

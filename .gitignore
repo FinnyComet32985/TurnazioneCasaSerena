@@ -6,3 +6,4 @@
 *.spec
 **/__pycache__/
 *.py[cod]
+init_dipendenti.sql

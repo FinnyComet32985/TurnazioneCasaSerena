@@ -20,7 +20,6 @@ class MainWindow(QMainWindow):
         # Memorizziamo i sistemi logici
         self.sistema_dipendenti = sistema_dipendenti
         self.turnazione = turnazione
-        # Manteniamo il riferimento 'interfaccia' per compatibilità con le sub-viste
         self.interfaccia = self
         self.setWindowIcon(QIcon(resource_path("app_icon.ico")))
         self.setWindowTitle("Turnazione Casa Serena")
