@@ -1,3 +1,4 @@
+from path_util import resource_path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedWidget,
     QMessageBox, QDialog, QLineEdit, QFormLayout, QComboBox, 
@@ -143,9 +144,9 @@ class AssenzaCard(QFrame):
         # Icona e Stile basato sul tipo
         tipo_assenza = TipoAssenza(assenza.tipo)
         config = {
-            TipoAssenza.FERIE: ("./interfacciaGrafica/assets/american-football.svg", "#f0fdf4", "#16a34a"),
-            TipoAssenza.ROL: ("./interfacciaGrafica/assets/time.svg", "#fefce8", "#ca8a04"),
-            TipoAssenza.CERTIFICATO: ("./interfacciaGrafica/assets/medkit.svg", "#fee2e2", "#dc2626")
+            TipoAssenza.FERIE: ("interfacciaGrafica/assets/american-football.svg", "#f0fdf4", "#16a34a"),
+            TipoAssenza.ROL: ("interfacciaGrafica/assets/time.svg", "#fefce8", "#ca8a04"),
+            TipoAssenza.CERTIFICATO: ("interfacciaGrafica/assets/medkit.svg", "#fee2e2", "#dc2626")
         }
         icon_path, bg_color, icon_color = config.get(tipo_assenza)
 
@@ -154,7 +155,7 @@ class AssenzaCard(QFrame):
         icon_label.setStyleSheet(f"background-color: {bg_color}; border-radius: 20px;")
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        pixmap = QPixmap(icon_path)
+        pixmap = QPixmap(resource_path(icon_path))
         painter = QPainter(pixmap)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
         painter.fillRect(pixmap.rect(), QColor(icon_color))
@@ -219,9 +220,9 @@ class AssenzaCard(QFrame):
         """)
         
         edit_act = QAction("Modifica Periodo", self)
-        edit_act.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/pencil.svg", "#3b82f6"))
+        edit_act.setIcon(self.get_colored_icon("interfacciaGrafica/assets/pencil.svg", "#3b82f6"))
         delete_act = QAction("Elimina Assenza", self)
-        delete_act.setIcon(self.get_colored_icon("./interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
+        delete_act.setIcon(self.get_colored_icon("interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
         
         menu.addAction(edit_act)
         menu.addSeparator()
@@ -234,7 +235,7 @@ class AssenzaCard(QFrame):
             self.deleteRequested.emit(self.assenza)
 
     def get_colored_icon(self, path, color):
-        pix = QPixmap(path)
+        pix = QPixmap(resource_path(path))
         painter = QPainter(pix)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
         painter.fillRect(pix.rect(), QColor(color))
@@ -264,7 +265,7 @@ class AssenzeView(QWidget):
         
         self.btn_add = QPushButton("  Aggiungi Assenza")
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_add.setIcon(QIcon("./interfacciaGrafica/assets/add-circle.svg"))
+        self.btn_add.setIcon(QIcon(resource_path("interfacciaGrafica/assets/add-circle.svg")))
         self.btn_add.setIconSize(QSize(20, 20))
         self.btn_add.setStyleSheet("""
             QPushButton {
@@ -398,7 +399,7 @@ class AssenzeView(QWidget):
         title_lbl.setStyleSheet("font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 5px;")
         
         # Preparo l'icona ricolorandola di blu
-        pix_pencil = QPixmap("./interfacciaGrafica/assets/pencil.svg")
+        pix_pencil = QPixmap(resource_path("interfacciaGrafica/assets/pencil.svg"))
         if not pix_pencil.isNull():
             painter = QPainter(pix_pencil)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
@@ -544,7 +545,7 @@ class AssenzeView(QWidget):
 
         info_icon = QLabel()
         
-        pixmap = QPixmap("./interfacciaGrafica/assets/information-circle.svg")
+        pixmap = QPixmap(resource_path("interfacciaGrafica/assets/information-circle.svg"))
         painter = QPainter(pixmap)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
         painter.fillRect(pixmap.rect(), QColor("#1e3a8a")) # Blu Scuro (uguale al testo)

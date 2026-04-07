@@ -1,3 +1,4 @@
+from path_util import resource_path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QStackedWidget,
@@ -19,14 +20,14 @@ class AddDipendenteDialog(QDialog):
         self.setFixedWidth(300)
         
         layout = QFormLayout(self)
-        self.input_nome = QLineEdit()
         self.input_cognome = QLineEdit()
+        self.input_nome = QLineEdit()
         
         for inp in [self.input_nome, self.input_cognome]:
             inp.setStyleSheet("background-color: white; color: #0f172a; border: 1px solid #cbd5e1; padding: 5px; border-radius: 4px;")
 
-        layout.addRow("Nome:", self.input_nome)
         layout.addRow("Cognome:", self.input_cognome)
+        layout.addRow("Nome:", self.input_nome)
         
         btn_layout = QHBoxLayout()
         btn_salva = QPushButton("Salva")
@@ -41,7 +42,7 @@ class AddDipendenteDialog(QDialog):
         layout.addRow(btn_layout)
         
     def get_data(self):
-        return self.input_nome.text().strip(), self.input_cognome.text().strip()
+        return self.input_cognome.text().strip(), self.input_nome.text().strip()
 
 class ModificaDatiDialog(QDialog):
     def __init__(self, dipendente, parent=None):
@@ -116,9 +117,9 @@ class PersonaleView(QWidget):
         stats_layout.setSpacing(20)
 
         # Creazione Card (Salviamo le label dei valori in self per aggiornarle dopo)
-        card_totale, self.lbl_tot_dip = self.create_stat_card("TOTALE DIPENDENTI", "-", "#3b82f6", "./interfacciaGrafica/assets/id-card.svg")
-        card_ferie, self.lbl_tot_ferie = self.create_stat_card("FERIE IN CORSO", "-", "#f59e0b", "./interfacciaGrafica/assets/earth.svg")
-        card_cert, self.lbl_tot_cert = self.create_stat_card("PERSONALE IN CERTIFICATO", "-", "#ef4444", "./interfacciaGrafica/assets/fitness.svg")
+        card_totale, self.lbl_tot_dip = self.create_stat_card("TOTALE DIPENDENTI", "-", "#3b82f6", "interfacciaGrafica/assets/id-card.svg")
+        card_ferie, self.lbl_tot_ferie = self.create_stat_card("FERIE IN CORSO", "-", "#f59e0b", "interfacciaGrafica/assets/earth.svg")
+        card_cert, self.lbl_tot_cert = self.create_stat_card("PERSONALE IN CERTIFICATO", "-", "#ef4444", "interfacciaGrafica/assets/fitness.svg")
 
         stats_layout.addWidget(card_totale)
         stats_layout.addWidget(card_ferie)
@@ -145,7 +146,7 @@ class PersonaleView(QWidget):
         search_layout.setSpacing(6)
 
         search_icon = QLabel()
-        search_icon.setPixmap(QPixmap("./interfacciaGrafica/assets/search.svg").scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        search_icon.setPixmap(QPixmap(resource_path("interfacciaGrafica/assets/search.svg")).scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Cerca dipendente...")
@@ -163,7 +164,7 @@ class PersonaleView(QWidget):
         search_layout.addWidget(self.search_input)
         
         self.btn_assumi = QPushButton(" Assumi Dipendente")
-        self.btn_assumi.setIcon(QIcon("./interfacciaGrafica/assets/person-add.svg"))
+        self.btn_assumi.setIcon(QIcon(resource_path("interfacciaGrafica/assets/person-add.svg")))
         self.btn_assumi.setStyleSheet("""
             QPushButton {
                 padding: 8px 16px; 
@@ -184,7 +185,7 @@ class PersonaleView(QWidget):
         
         # --- TABELLA DIPENDENTI ---
         self.table = QTableWidget()
-        headers = ["Cognome", "Nome", "Ferie (gg)", "ROL (h)", "Banca Ore", "Stato", ""]
+        headers = ["Nome", "Cognome", "Ferie (gg)", "ROL (h)", "Banca Ore", "Stato", ""]
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -285,7 +286,7 @@ class PersonaleView(QWidget):
         card_layout.setSpacing(15)
         
         lbl_icona = QLabel()
-        pixmap = QPixmap(icon_path)
+        pixmap = QPixmap(resource_path(icon_path))
         if not pixmap.isNull():
             pixmap = pixmap.scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             lbl_icona.setPixmap(pixmap)
@@ -323,7 +324,7 @@ class PersonaleView(QWidget):
             self.table.insertRow(row)
             
             # Creazione degli item per le colonne testuali con allineamento centrato
-            testo_colonne = [dip.cognome, dip.nome, f"{dip.ferie_rimanenti:.2f}", 
+            testo_colonne = [dip.nome, dip.cognome, f"{dip.ferie_rimanenti:.2f}", 
                              f"{dip.rol_rimanenti:.2f}", f"{dip.banca_ore:.2f}"]
             
             for col, testo in enumerate(testo_colonne):
@@ -388,7 +389,7 @@ class PersonaleView(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         icon_label = QLabel()
-        pixmap = QPixmap("./interfacciaGrafica/assets/arrow-forward.svg")
+        pixmap = QPixmap(resource_path("interfacciaGrafica/assets/arrow-forward.svg"))
         if not pixmap.isNull():
             icon_label.setPixmap(pixmap.scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         
@@ -406,8 +407,8 @@ class PersonaleView(QWidget):
     def cmd_assumi(self):
         dialog = AddDipendenteDialog(self)
         if dialog.exec():
-            nome, cognome = dialog.get_data()
-            if nome and cognome:
+            cognome, nome = dialog.get_data()
+            if cognome and nome:
                 # Chiama direttamente il sistema ignorando l'input console di interfacciaDirigente
                 self.interfaccia.sistema_dipendenti.assumi_dipendente(nome, cognome)
                 self.aggiorna_tabella()

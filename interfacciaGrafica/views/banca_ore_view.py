@@ -1,3 +1,4 @@
+from path_util import resource_path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QMessageBox,
     QGridLayout, QDialog, QDoubleSpinBox, QFormLayout, QLineEdit
@@ -198,7 +199,7 @@ class BancaOreView(QWidget):
         lbl_title.setStyleSheet("color: rgba(255,255,255,0.8); font-size: 12px; font-weight: bold; letter-spacing: 1px;")
         
         icon_label = QLabel()
-        pix = QPixmap("./interfacciaGrafica/assets/hourglass.svg")
+        pix = QPixmap(resource_path("interfacciaGrafica/assets/hourglass.svg"))
         if not pix.isNull():
             # Ricoloro l'icona in Oro chiaro
             painter = QPainter(pix)
@@ -234,7 +235,7 @@ class BancaOreView(QWidget):
         # Bottone Regola
         self.btn_regola = QPushButton("  Regola saldo ore")
         self.btn_regola.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_regola.setIcon(QIcon("./interfacciaGrafica/assets/options.svg"))
+        self.btn_regola.setIcon(QIcon(resource_path("interfacciaGrafica/assets/options.svg")))
         self.btn_regola.setIconSize(QSize(20, 20))
         self.btn_regola.setStyleSheet("""
             QPushButton {
@@ -264,7 +265,7 @@ class BancaOreView(QWidget):
         info_layout.setSpacing(5) 
 
         info_icon = QLabel()
-        pixmap = QPixmap("./interfacciaGrafica/assets/information-circle.svg")
+        pixmap = QPixmap(resource_path("interfacciaGrafica/assets/information-circle.svg"))
         painter = QPainter(pixmap)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
         painter.fillRect(pixmap.rect(), QColor("#1e3a8a"))
@@ -334,7 +335,7 @@ class BancaOreView(QWidget):
         icon_lbl.setStyleSheet(f"background-color: {bg_icon}; border-radius: 20px;")
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        pix = QPixmap(f"./interfacciaGrafica/assets/{icon_name}")
+        pix = QPixmap(resource_path(f"interfacciaGrafica/assets/{icon_name}"))
         if not pix.isNull():
             painter = QPainter(pix)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
