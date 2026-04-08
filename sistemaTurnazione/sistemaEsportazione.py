@@ -14,7 +14,7 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
     """Genera un PDF in formato A4 verticale della turnazione settimanale."""
     
     # Configurazione documento (A4 Verticale) - Margini ottimizzati per singola pagina
-    doc = SimpleDocTemplate(path, pagesize=A4, rightMargin=1.0*cm, leftMargin=1.0*cm, topMargin=1.0*cm, bottomMargin=1.0*cm)
+    doc = SimpleDocTemplate(path, pagesize=A4, rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=1.2*cm, bottomMargin=1.2*cm)
     elements = []
     styles = getSampleStyleSheet()
     
@@ -73,10 +73,6 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
     # --- TABELLA TURNI ---
     anno, sett, _ = monday.isocalendar()
     settimana_dict = turnazione.get_turnazione_settimana((anno, sett))
-
-    # Definizione larghezze colonne: Totale disponibile 19cm (21cm - 2cm margini)
-    # Giorno (2.0), Mattina (4.5), Pomeriggio (4.5), Notte (4.5), Riposo (3.5)
-    col_widths = [2.0*cm, 4.5*cm, 4.5*cm, 4.5*cm, 3.5*cm]
     
     if not settimana_dict:
         elements.append(Paragraph("<i>Nessuna turnazione definita per questa settimana.</i>", style_info))
@@ -112,7 +108,7 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
                     
                     # Organizzazione nomi: due per riga solo se non superano la larghezza cella
                     col_idx = fasce_disponibili.index(tipo) + 1
-                    col_w_pts = col_widths[col_idx]
+                    col_w_pts = [2.2*cm, 3.8*cm, 3.8*cm, 3.8*cm, 3.4*cm][col_idx]
                     limit_w = col_w_pts - 12 # Sottraiamo il padding interno (6pt per lato)
                     
                     nomi_wrapped = []
@@ -140,7 +136,8 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
                     row.append("-")
             data.append(row)
 
-        table = Table(data, colWidths=col_widths)
+        # Larghezza totale A4 (21cm) - Margini (4cm) = 17cm disponibili
+        table = Table(data, colWidths=[2.2*cm, 3.8*cm, 3.8*cm, 3.8*cm, 3.4*cm])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),

@@ -157,6 +157,28 @@ class SistemaDipendenti:
         if result:
             dip = self.get_dipendente(id_dipendente)
             if dip:
+                # Trova l'assenza da rimuovere per riaccreditare le ore/giorni
+                absence_to_remove = None
+                for ass in dip.assenze_programmate:
+                    if getattr(ass, 'id_assenza', None) == id_assenza:
+                        absence_to_remove = ass
+                        break
+
+                if absence_to_remove:
+                    fmt = "%Y-%m-%d %H:%M:%S"
+                    dt_inizio = datetime.strptime(absence_to_remove.data_inizio, fmt)
+                    dt_fine = datetime.strptime(absence_to_remove.data_fine, fmt)
+                    
+                    if absence_to_remove.tipo == TipoAssenza.FERIE.value:
+                        giorni = (dt_fine.date() - dt_inizio.date()).days + 1
+                        dip.ferie_rimanenti = round(dip.ferie_rimanenti + giorni, 2)
+                    elif absence_to_remove.tipo == TipoAssenza.ROL.value:
+                        ore = (dt_fine - dt_inizio).total_seconds() / 3600
+                        dip.rol_rimanenti = round(dip.rol_rimanenti + ore, 2)
+                    
+                    # Aggiorna il saldo del dipendente nel database
+                    sistemaSalvataggio.update_dipendente(dip.id_dipendente, dip.nome, dip.cognome, dip.ferie_rimanenti, dip.rol_rimanenti)
+            if dip:
                 dip.assenze_programmate = [a for a in dip.assenze_programmate if getattr(a, 'id_assenza', None) != id_assenza]
             return True
         return False
