@@ -5,6 +5,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.units import cm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 
 from sistemaTurnazione.fasciaOraria import TipoFascia
 from sistemaDipendenti.dipendente import StatoDipendente
@@ -12,15 +13,15 @@ from sistemaDipendenti.dipendente import StatoDipendente
 def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_disponibili):
     """Genera un PDF in formato A4 verticale della turnazione settimanale."""
     
-    # Configurazione documento (A4 Verticale) - Ripristino margini standard
-    doc = SimpleDocTemplate(path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    # Configurazione documento (A4 Verticale) - Margini ottimizzati per singola pagina
+    doc = SimpleDocTemplate(path, pagesize=A4, rightMargin=1.0*cm, leftMargin=1.0*cm, topMargin=1.0*cm, bottomMargin=1.0*cm)
     elements = []
     styles = getSampleStyleSheet()
     
     # --- STILI PERSONALIZZATI ---
-    style_h1 = ParagraphStyle('H1', parent=styles['Normal'], fontSize=14, leading=18, alignment=1, spaceAfter=2, fontName='Helvetica-Bold')
-    style_h2 = ParagraphStyle('H2', parent=styles['Normal'], fontSize=11, leading=14, alignment=1, spaceAfter=10, fontName='Helvetica')
-    style_info = ParagraphStyle('Info', parent=styles['Normal'], fontSize=9, leading=11, spaceAfter=3)
+    style_h1 = ParagraphStyle('H1', parent=styles['Normal'], fontSize=14, leading=16, alignment=1, spaceAfter=1, fontName='Helvetica-Bold')
+    style_h2 = ParagraphStyle('H2', parent=styles['Normal'], fontSize=11, leading=13, alignment=1, spaceAfter=5, fontName='Helvetica')
+    style_info = ParagraphStyle('Info', parent=styles['Normal'], fontSize=8.5, leading=10, spaceAfter=2)
     
     # --- INTESTAZIONE ---
     elements.append(Paragraph("ASSOCIAZIONE \"CASA SERENA\"", style_h1))
@@ -38,7 +39,7 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
     
     elements.append(Paragraph(testo_mese, style_h2))
     elements.append(Paragraph(f"DAL {monday.strftime('%d/%m/%Y')} AL {sunday.strftime('%d/%m/%Y')}", style_h2))
-    elements.append(Spacer(1, 10))
+    elements.append(Spacer(1, 5))
     
     # --- SEZIONE ASSENZE (DIPENDENTE ferie / rol / certificato DAL ... AL ...) ---
     dipendenti = sistema_dipendenti.get_lista_dipendenti()
@@ -67,11 +68,15 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
             except: continue
             
     if found_assenza:
-        elements.append(Spacer(1, 15))
+        elements.append(Spacer(1, 8))
 
     # --- TABELLA TURNI ---
     anno, sett, _ = monday.isocalendar()
     settimana_dict = turnazione.get_turnazione_settimana((anno, sett))
+
+    # Definizione larghezze colonne: Totale disponibile 19cm (21cm - 2cm margini)
+    # Giorno (2.0), Mattina (4.5), Pomeriggio (4.5), Notte (4.5), Riposo (3.5)
+    col_widths = [2.0*cm, 4.5*cm, 4.5*cm, 4.5*cm, 3.5*cm]
     
     if not settimana_dict:
         elements.append(Paragraph("<i>Nessuna turnazione definita per questa settimana.</i>", style_info))
@@ -105,31 +110,48 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
                         
                         nomi.append(f"{nome_display}{tag}")
                     
-                    # Organizzazione nomi in due colonne (affiancati) per risparmiare spazio verticale
-                    nomi_due_colonne = []
-                    for j in range(0, len(nomi), 2):
-                        if j + 1 < len(nomi):
-                            nomi_due_colonne.append(f"{nomi[j]}  |  {nomi[j+1]}")
+                    # Organizzazione nomi: due per riga solo se non superano la larghezza cella
+                    col_idx = fasce_disponibili.index(tipo) + 1
+                    col_w_pts = col_widths[col_idx]
+                    limit_w = col_w_pts - 12 # Sottraiamo il padding interno (6pt per lato)
+                    
+                    nomi_wrapped = []
+                    current_line = ""
+                    count_in_line = 0
+                    
+                    for n in nomi:
+                        if not current_line:
+                            current_line = n
+                            count_in_line = 1
                         else:
-                            nomi_due_colonne.append(nomi[j])
-                    row.append("\n".join(nomi_due_colonne))
+                            test_line = f"{current_line}  |  {n}"
+                            # Se ci sono già 2 nomi o se il terzo non entrerebbe, andiamo a capo
+                            if count_in_line < 2 and stringWidth(test_line, 'Helvetica-Bold', 11) < limit_w:
+                                current_line = test_line
+                                count_in_line += 1
+                            else:
+                                nomi_wrapped.append(current_line)
+                                current_line = n
+                                count_in_line = 1
+                    if current_line:
+                        nomi_wrapped.append(current_line)
+                    row.append("\n".join(nomi_wrapped))
                 else:
                     row.append("-")
             data.append(row)
 
-        # Larghezza totale A4 (21cm) - Margini (4cm) = 17cm disponibili
-        table = Table(data, colWidths=[2.2*cm, 3.8*cm, 3.8*cm, 3.8*cm, 3.4*cm])
+        table = Table(data, colWidths=col_widths)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-            ('LEADING', (0, 0), (-1, -1), 10),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 11), # Ingrandito a 11
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey), 
+            ('TOPPADDING', (0, 0), (-1, -1), 5), # Padding ridotto per far stare tutto in una pagina
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('LEADING', (0, 0), (-1, -1), 13), # Interlinea ottimizzata
         ]))
         
         elements.append(table)
