@@ -171,15 +171,13 @@ class SistemaGenerazione:
                 else:
                     best_ass.turnoBreve = False # Rollback in memoria
 
-    def genera_turnazione_automatica(self, anno: int, settimana: int, genera_piani: bool = True, date_notti_extra: List[date] = None) -> bool:
+    def genera_turnazione_automatica(self, anno: int, settimana: int, genera_piani: bool = True) -> bool:
         """
         Genera automaticamente i turni per la settimana specificata.
         Priorità: 1. Notti, 2. Turni Diurni (Mattina/Pomeriggio).
         Criterio: Rotazione (data ultimo turno).
         """
-        if date_notti_extra is None:
-            date_notti_extra = []
-            
+        
         print(f"--- Inizio Generazione Automatica Settimana {anno}-{settimana} ---")
         
         # 1. Inizializza la griglia vuota (se non esiste)
@@ -211,13 +209,6 @@ class SistemaGenerazione:
                         slots_obiettivi.append((1, True)) # Jolly default su P1
 
                     target_operatori = len(slots_obiettivi)
-                    if target_operatori == 0 and tipo_fascia == TipoFascia.NOTTE:
-                        target_operatori = 1
-                        slots_obiettivi = [(0, False)]
-                        
-                    if tipo_fascia == TipoFascia.NOTTE and giorno in date_notti_extra:
-                        target_operatori += 1
-                        slots_obiettivi.append((0, False))
 
                     # Controlliamo quanti ne abbiamo già (nel caso di rigenerazione parziale)
                     fascia_obj = self.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(giorno, {}).get(tipo_fascia)

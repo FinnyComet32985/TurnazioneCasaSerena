@@ -47,8 +47,8 @@ class FasciaOraria:
         elif self.tipo == TipoFascia.POMERIGGIO and len(self.assegnazioni) >= 6:
             print("Errore: nel turno sono già presenti 6 oss")
             return False
-        elif self.tipo == TipoFascia.NOTTE and len(self.assegnazioni) >= 2:
-            print("Errore: nel turno sono già presenti 2 oss")
+        elif self.tipo == TipoFascia.NOTTE and len(self.assegnazioni) >= 5:
+            print("Errore: nel turno sono già presenti 5 oss")
             return False
 
         # VINCOLO: Il turno breve è applicabile solo alla fascia MATTINA

@@ -116,8 +116,14 @@ class ImpostazioniView(QWidget):
         n_title = QLabel("TURNO NOTTE")
         n_title.setStyleSheet("font-weight: bold; color: #6366f1; font-size: 14px; margin-bottom: 5px;")
         n_form = QFormLayout()
-        self.n_tot = self.create_styled_spin(1, 5, self.t.limiti_piani_fascia[TipoFascia.NOTTE][0])
-        n_form.addRow("Genera (A.I.)", self.n_tot)
+        self.n_pt = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.NOTTE][0])
+        self.n_p1 = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.NOTTE][1])
+        self.n_p2 = self.create_styled_spin(0, 10, self.t.limiti_piani_fascia[TipoFascia.NOTTE][2])
+        self.n_jolly = self.create_styled_spin(0, 5, self.t.limiti_piani_fascia[TipoFascia.NOTTE]['jolly'])
+        n_form.addRow("Piano Terra", self.n_pt)
+        n_form.addRow("1° Piano", self.n_p1)
+        n_form.addRow("2° Piano", self.n_p2)
+        n_form.addRow("Jolly", self.n_jolly)
         n_box.addWidget(n_title)
         n_box.addLayout(n_form)
         n_box.addStretch()
@@ -133,15 +139,10 @@ class ImpostazioniView(QWidget):
         sys_form.setContentsMargins(10, 10, 10, 0)
 
         self.spin_jolly_globale = self.create_styled_spin(0, 5, self.t.max_jolly_per_turno)
-        self.n_manual = self.create_styled_spin(1, 10, self.t.limiti_piani_fascia[TipoFascia.NOTTE].get('manual_limit', 2))
         
         lbl_jolly = QLabel("Limite Jolly per fascia:")
         lbl_jolly.setToolTip("Blocca l'inserimento manuale se si supera questo numero di Jolly in un singolo turno.")
         sys_form.addRow(lbl_jolly, self.spin_jolly_globale)
-
-        lbl_n_manual = QLabel("Capienza massima Notte:")
-        lbl_n_manual.setToolTip("Permette l'inserimento manuale di operatori extra di notte (es. per emergenze) fino a questo limite.")
-        sys_form.addRow(lbl_n_manual, self.n_manual)
 
         sys_card.layout().addLayout(sys_form)
         container_layout.addWidget(sys_card)
@@ -209,12 +210,47 @@ class ImpostazioniView(QWidget):
             self.t.set_config_limite_piano_fascia(TipoFascia.POMERIGGIO, 'jolly', self.p_jolly.value())
             
             # Notte
-            self.t.set_config_limite_piano_fascia(TipoFascia.NOTTE, 0, self.n_tot.value())
-            self.t.set_config_limite_piano_fascia(TipoFascia.NOTTE, 'manual_limit', self.n_manual.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.NOTTE, 0, self.n_pt.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.NOTTE, 1, self.n_p1.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.NOTTE, 2, self.n_p2.value())
+            self.t.set_config_limite_piano_fascia(TipoFascia.NOTTE, 'jolly', self.n_jolly.value())
 
             # Parametri Sistema ripristinati
             self.t.set_config_max_jolly(self.spin_jolly_globale.value())
 
-            QMessageBox.information(self, "Successo", "Configurazioni salvate correttamente nel database.")
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Successo")
+            msg_box.setText("Configurazioni salvate correttamente nel database.")
+            msg_box.setIcon(QMessageBox.Icon.Information)
+            msg_box.setStyleSheet("""
+                QMessageBox { background-color: white; }
+                QLabel { color: #0f172a; font-size: 14px; }
+                QPushButton { 
+                    background-color: #f1f5f9; 
+                    color: #0f172a; 
+                    border: 1px solid #cbd5e1; 
+                    padding: 6px 20px; 
+                    border-radius: 4px; 
+                }
+                QPushButton:hover { background-color: #e2e8f0; }
+            """)
+            msg_box.exec()
         except Exception as e:
-            QMessageBox.critical(self, "Errore", f"Impossibile salvare le impostazioni: {e}")
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Errore")
+            msg_box.setText(f"Impossibile salvare le impostazioni: {e}")
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            # Riutilizziamo lo stesso stile per coerenza
+            msg_box.setStyleSheet("""
+                QMessageBox { background-color: white; }
+                QLabel { color: #0f172a; font-size: 14px; }
+                QPushButton { 
+                    background-color: #f1f5f9; 
+                    color: #0f172a; 
+                    border: 1px solid #cbd5e1; 
+                    padding: 6px 20px; 
+                    border-radius: 4px; 
+                }
+                QPushButton:hover { background-color: #e2e8f0; }
+            """)
+            msg_box.exec()

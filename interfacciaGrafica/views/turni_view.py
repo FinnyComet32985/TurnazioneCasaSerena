@@ -19,52 +19,6 @@ from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 from sistemaTurnazione.sistemaEsportazione import genera_pdf_settimanale
 from sistemaTurnazione.festivita_util import get_festivita_italiane
 
-class NottiExtraDialog(QDialog):
-    def __init__(self, start_date: date, notti_esistenti: list, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Impostazioni Generazione Notti")
-        self.start_date = start_date
-        self.notti_esistenti = notti_esistenti
-        self.giorni_selezionati = []
-        self._setup_ui()
-        
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        
-        lbl_info = QLabel("Vuoi avviare la generazione automatica dei turni per questa settimana? I turni esistenti verranno mantenuti, saranno riempiti solo i posti vacanti.\n\nScegli per quali giorni vuoi che il sistema generi DUE operatori per il turno di Notte:")
-        lbl_info.setWordWrap(True)
-        lbl_info.setStyleSheet("font-size: 14px; margin-bottom: 10px;")
-        layout.addWidget(lbl_info)
-        
-        self.checkboxes = []
-        giorni_nomi = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-        for i in range(7):
-            giorno_dt = self.start_date + timedelta(days=i)
-            cb = QCheckBox(f"{giorni_nomi[i]} {giorno_dt.strftime('%d/%m')}")
-            cb.setProperty("data_giorno", giorno_dt)
-            # Se era già parzialmente riempita dal dirigente, la preselezioniamo
-            if giorno_dt in self.notti_esistenti:
-                cb.setChecked(True)
-                cb.setText(cb.text() + " (Già 1 operatore presente)")
-            
-            self.checkboxes.append(cb)
-            layout.addWidget(cb)
-            
-        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        btn_box.accepted.connect(self.accept)
-        btn_box.rejected.connect(self.reject)
-        layout.addWidget(btn_box)
-        
-        self.setStyleSheet("""
-            QLabel { font-size: 14px; }
-            QCheckBox { font-size: 14px; spacing: 8px; margin: 2px 0; }
-            QCheckBox::indicator { width: 18px; height: 18px; }
-        """)
-
-    def accept(self):
-        self.giorni_selezionati = [cb.property("data_giorno") for cb in self.checkboxes if cb.isChecked()]
-        super().accept()
-
 class AssignTurnoDialog(QDialog):
     def __init__(self, dipendenti, dt_turno, tipo_fascia, parent=None, assegnazione_esistente=None):
         super().__init__(parent)
@@ -1614,21 +1568,11 @@ class TurniView(QWidget):
                                "Cancella prima la turnazione per la settimana prossima e poi riprova.")
             return
 
-        settimana_dict = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana))
-
-        # Rileviamo eventuali notti già parzialmente inserite per suggerirle nel dialog
-        notti_esistenti = []
-        if settimana_dict:
-            for dt, fasce_giorno in settimana_dict.items():
-                if TipoFascia.NOTTE in fasce_giorno and len(fasce_giorno[TipoFascia.NOTTE].assegnazioni) == 1:
-                    notti_esistenti.append(dt)
-
-        # Mostriamo il nuovo Dialog globale per le impostazioni e confermare la generazione
-        dialog = NottiExtraDialog(self.current_monday, notti_esistenti, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return  # Interrompe la generazione se l'utente annulla
-            
-        date_notti_extra = dialog.giorni_selezionati
+        reply = QMessageBox.question(self, "Conferma Generazione", 
+                                   "Vuoi avviare la generazione automatica dei turni per questa settimana?\nIl sistema seguirà i limiti per piano impostati nelle configurazioni.",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.No:
+            return
 
         # Feedback visivo di caricamento
         progress = QProgressDialog(self)
@@ -1656,8 +1600,8 @@ class TurniView(QWidget):
         
         from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
         generatore = SistemaGenerazione(self.interfaccia.turnazione, self.interfaccia.sistema_dipendenti)
-        
-        esito = generatore.genera_turnazione_automatica(anno, settimana, genera_piani=True, date_notti_extra=date_notti_extra)
+
+        esito = generatore.genera_turnazione_automatica(anno, settimana, genera_piani=True)
         
         progress.close()
         
