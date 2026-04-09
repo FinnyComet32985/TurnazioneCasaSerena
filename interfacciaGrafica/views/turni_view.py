@@ -18,6 +18,7 @@ from sistemaDipendenti.assenzaProgrammata import TipoAssenza
 # Import del modulo di esportazione
 from sistemaTurnazione.sistemaEsportazione import genera_pdf_settimanale
 from sistemaTurnazione.festivita_util import get_festivita_italiane
+from interfacciaGrafica.styles import MESSAGE_BOX_STYLE
 
 class AssignTurnoDialog(QDialog):
     def __init__(self, dipendenti, dt_turno, tipo_fascia, parent=None, assegnazione_esistente=None):
@@ -1569,7 +1570,7 @@ class TurniView(QWidget):
                            "La settimana successiva contiene già turni attivi. Per garantire la corretta programmazione dei riposi a cavallo (es. notti di domenica e riposi di lunedì), le settimane devono essere generate in ordine cronologico.\n\n"
                            "Cancella prima la turnazione per la settimana successiva e poi riprova.")
             msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setStyleSheet(self._get_msg_box_style())
+            msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
             msg_box.exec()
             return
         
@@ -1577,7 +1578,7 @@ class TurniView(QWidget):
         msg_box.setWindowTitle("Conferma Generazione")
         msg_box.setText("Vuoi avviare la generazione automatica dei turni per questa settimana?\nIl sistema seguirà i limiti per piano impostati nelle configurazioni.")
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msg_box.setStyleSheet(self._get_msg_box_style())
+        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         if msg_box.exec() == QMessageBox.StandardButton.No:
             return
 
@@ -1613,14 +1614,14 @@ class TurniView(QWidget):
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("Completato")
             msg_box.setText("Turnazione generata con successo.")
-            msg_box.setIcon(QMessageBox.Icon.Information)
-            msg_box.setStyleSheet(self._get_msg_box_style())
+            msg_box.setIcon(QMessageBox.Icon.Information) # This QMessageBox is not styled by _get_msg_box_style
+            msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
             msg_box.exec()
             self.aggiorna_tabella()
         else:
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("Errore")
-            msg_box.setText("Si è verificato un errore durante la generazione automatica.")
+            msg_box.setText("Si è verificato un errore durante la generazione automatica.") # This QMessageBox is not styled by _get_msg_box_style
             msg_box.setIcon(QMessageBox.Icon.Critical)
             msg_box.setStyleSheet(self._get_msg_box_style())
             msg_box.exec()
@@ -1647,7 +1648,7 @@ class TurniView(QWidget):
             msg_box.setWindowTitle("Approvazione Negata")
             msg_box.setText(f"Impossibile approvare la settimana: la copertura dei turni è al {int(perc)}%.\n\n"
                             "Assicurati di aver coperto tutti i posti vacanti secondo i limiti configurati prima di procedere.")
-            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
             msg_box.setStyleSheet(self._get_msg_box_style())
             msg_box.exec()
             return
@@ -1656,24 +1657,24 @@ class TurniView(QWidget):
         msg_box.setWindowTitle("Approvazione Settimana")
         msg_box.setText("Con l'approvazione, i saldi ore verranno consolidati nella banca ore dei dipendenti e la settimana verrà bloccata.\n\nVuoi procedere?")
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msg_box.setIcon(QMessageBox.Icon.Question)
-        msg_box.setStyleSheet(self._get_msg_box_style())
+        msg_box.setIcon(QMessageBox.Icon.Question) # This QMessageBox is not styled by _get_msg_box_style
+        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         
         if msg_box.exec() == QMessageBox.StandardButton.Yes:
             anno, settimana, _ = self.current_monday.isocalendar()
             if self.interfaccia.turnazione.approva_settimana(self.interfaccia.sistema_dipendenti, (anno, settimana)):
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("Approvata")
-                msg_box.setText("Settimana approvata e banca ore aggiornata.")
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setText("Settimana approvata e banca ore aggiornata.") # This QMessageBox is not styled by _get_msg_box_style
+                msg_box.setIcon(QMessageBox.Icon.Information) # This QMessageBox is not styled by _get_msg_box_style
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
                 self.aggiorna_tabella()
             else:
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Impossibile approvare la settimana.")
-                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
                 msg_box.setStyleSheet(self._get_msg_box_style())
                 msg_box.exec()
 
@@ -1682,24 +1683,24 @@ class TurniView(QWidget):
         msg_box.setWindowTitle("Riapertura Settimana")
         msg_box.setText("Riaprendo la settimana, i saldi banca ore precedentemente calcolati verranno stornati.\n\nVuoi proseguire con lo sblocco?")
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msg_box.setIcon(QMessageBox.Icon.Question)
-        msg_box.setStyleSheet(self._get_msg_box_style())
+        msg_box.setIcon(QMessageBox.Icon.Question) # This QMessageBox is not styled by _get_msg_box_style
+        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         
         if msg_box.exec() == QMessageBox.StandardButton.Yes:
             anno, settimana, _ = self.current_monday.isocalendar()
             if self.interfaccia.turnazione.riapri_settimana(self.interfaccia.sistema_dipendenti, (anno, settimana)):
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("Riaperta")
-                msg_box.setText("Settimana riaperta. I turni sono ora modificabili.")
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setText("Settimana riaperta. I turni sono ora modificabili.") # This QMessageBox is not styled by _get_msg_box_style
+                msg_box.setIcon(QMessageBox.Icon.Information) # This QMessageBox is not styled by _get_msg_box_style
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
                 self.aggiorna_tabella()
             else:
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Impossibile riaprire la settimana.")
-                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
                 msg_box.setStyleSheet(self._get_msg_box_style())
                 msg_box.exec()
 
@@ -1710,23 +1711,23 @@ class TurniView(QWidget):
                        "I dati non salvati andranno persi e i turni torneranno allo stato iniziale.")
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg_box.setIcon(QMessageBox.Icon.Question)
-        msg_box.setStyleSheet(self._get_msg_box_style())
+        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
         
         if msg_box.exec() == QMessageBox.StandardButton.Yes:
             anno, settimana, _ = self.current_monday.isocalendar()
             if self.interfaccia.turnazione.svuota_settimana(anno, settimana):
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("Svuotata")
-                msg_box.setText("Tutte le assegnazioni della settimana sono state rimosse.")
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setText("Tutte le assegnazioni della settimana sono state rimosse.") # This QMessageBox is not styled by _get_msg_box_style
+                msg_box.setIcon(QMessageBox.Icon.Information) # This QMessageBox is not styled by _get_msg_box_style
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
                 self.aggiorna_tabella()
             else:
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Impossibile svuotare la settimana. Verifica che non sia già approvata.")
-                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
                 msg_box.setStyleSheet(self._get_msg_box_style())
                 msg_box.exec()
 
@@ -1752,6 +1753,7 @@ class TurniView(QWidget):
             
             res = QMessageBox.information(self, "PDF Generato", f"Il file è stato salvato con successo in:\n{path}", 
                                           QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Ok) # This QMessageBox is not styled by _get_msg_box_style
+            res.setStyleSheet(MESSAGE_BOX_STYLE)
             if res == QMessageBox.StandardButton.Open:
                 import os
                 os.startfile(path)

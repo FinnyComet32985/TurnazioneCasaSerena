@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QIcon, QPainter, QColor, QAction
 from PyQt6.QtCore import Qt, QSize, QDateTime, pyqtSignal
 from sistemaDipendenti.assenzaProgrammata import TipoAssenza
+
+from interfacciaGrafica.styles import MESSAGE_BOX_STYLE
 from datetime import datetime, date, timedelta
 
 class AddAssenzaDialog(QDialog):
@@ -196,19 +198,7 @@ class AssenzaCard(QFrame):
             msg.setWindowTitle("Azione non consentita")
             msg.setText("Impossibile modificare o eliminare un'assenza già conclusa.")
             msg.setIcon(QMessageBox.Icon.Information)
-            # Forziamo i colori per garantire la leggibilità indipendentemente dal tema di sistema
-            msg.setStyleSheet("""
-                QMessageBox { background-color: white; }
-                QLabel { color: #0f172a; font-size: 14px; }
-                QPushButton { 
-                    background-color: #f1f5f9; 
-                    color: #0f172a; 
-                    border: 1px solid #cbd5e1; 
-                    padding: 6px 20px; 
-                    border-radius: 4px; 
-                }
-                QPushButton:hover { background-color: #e2e8f0; }
-            """)
+            msg.setStyleSheet(MESSAGE_BOX_STYLE)
             msg.exec()
             return
 
@@ -710,7 +700,7 @@ class AssenzeView(QWidget):
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setStyleSheet(self._get_msg_box_style())
-        
+
         if msg_box.exec() == QMessageBox.StandardButton.Yes:
             success = self.interfaccia.sistema_dipendenti.rimuovi_assenza(self.current_dip_id, assenza.id_assenza)
             if success:
@@ -719,7 +709,7 @@ class AssenzeView(QWidget):
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Impossibile eliminare l'assenza dal database.")
-                msg_box.setIcon(QMessageBox.Icon.Critical)
+                msg_box.setIcon(QMessageBox.Icon.Critical) # This QMessageBox is not styled by _get_msg_box_style
                 msg_box.setStyleSheet(self._get_msg_box_style())
                 msg_box.exec()
 
@@ -741,7 +731,7 @@ class AssenzeView(QWidget):
                 msg_box.setWindowTitle("Errore Data")
                 msg_box.setText("La data di fine assenza non può essere precedente alla data di inizio.")
                 msg_box.setIcon(QMessageBox.Icon.Warning)
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
                 return
 
@@ -759,7 +749,7 @@ class AssenzeView(QWidget):
                 msg_box.setWindowTitle("Successo")
                 msg_box.setText("Assenza modificata correttamente.")
                 msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
                 self.load_data(self.current_dip_id)
             else:
@@ -767,7 +757,7 @@ class AssenzeView(QWidget):
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Errore durante la modifica dell'assenza.")
                 msg_box.setIcon(QMessageBox.Icon.Critical)
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
 
     def cmd_add_assenza(self):
@@ -783,7 +773,7 @@ class AssenzeView(QWidget):
                 msg_box.setWindowTitle("Errore Data")
                 msg_box.setText("La data di fine assenza non può essere precedente alla data di inizio.")
                 msg_box.setIcon(QMessageBox.Icon.Warning)
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
                 return
 
@@ -799,7 +789,7 @@ class AssenzeView(QWidget):
                     msg_box.setWindowTitle("Attenzione")
                     msg_box.setText("Il dipendente ha già un'assenza registrata in questo periodo.")
                     msg_box.setIcon(QMessageBox.Icon.Warning)
-                    msg_box.setStyleSheet(self._get_msg_box_style())
+                    msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                     msg_box.exec()
                     return
                 if success:
@@ -821,18 +811,18 @@ class AssenzeView(QWidget):
                         msg_box = QMessageBox(self)
                         msg_box.setWindowTitle("Conflitto Turnazione")
                         msg_box.setText(f"Assenza aggiunta con successo. Tuttavia il dipendente era già presente in turnazione il {conflict_date.strftime('%d/%m/%Y')}.\n\nVuoi andare alla turnazione per modificarla ora?")
-                        msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                        msg_box.setStyleSheet(self._get_msg_box_style())
+                        msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) # This QMessageBox is not styled by _get_msg_box_style
+                        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                         if msg_box.exec() == QMessageBox.StandardButton.Yes:
                             self.navigazioneTurni.emit(conflict_date)
                     
                     self.load_data(self.current_dip_id)
                 else:
                     msg_box = QMessageBox(self)
-                    msg_box.setWindowTitle("Errore")
+                    msg_box.setWindowTitle("Errore") # This QMessageBox is not styled by _get_msg_box_style
                     msg_box.setText("Impossibile aggiungere l'assenza. Verifica che le date non siano già occupate o che i saldi siano sufficienti.")
                     msg_box.setIcon(QMessageBox.Icon.Critical)
-                    msg_box.setStyleSheet(self._get_msg_box_style())
+                    msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                     msg_box.exec()
             else:
                 msg_box = QMessageBox(self)
@@ -840,7 +830,7 @@ class AssenzeView(QWidget):
                 msg_box.setText("Assicurati di aver selezionato il tipo di assenza e le date.")
                 msg_box.setIcon(QMessageBox.Icon.Warning)
                 msg_box.setStyleSheet(self._get_msg_box_style())
-                msg_box.exec()
+                msg_box.exec() # This QMessageBox is not styled by _get_msg_box_style
 
     def cmd_modifica_resoconto(self):
         if not self.current_dip_id: return
@@ -866,23 +856,7 @@ class AssenzeView(QWidget):
             else:
                 msg_box = QMessageBox(self)
                 msg_box.setWindowTitle("Errore")
-                msg_box.setText("Impossibile aggiornare i saldi.")
-                msg_box.setIcon(QMessageBox.Icon.Critical)
-                msg_box.setStyleSheet(self._get_msg_box_style())
-                msg_box.exec()
-
-    def _get_msg_box_style(self):
-        """Helper per ottenere uno stile consistente per i QMessageBox."""
-        return """
-            QMessageBox { background-color: white; }
-            QLabel { color: #0f172a; font-size: 14px; }
-            QPushButton { 
-                background-color: #f1f5f9; 
-                color: #0f172a; 
-                border: 1px solid #cbd5e1; 
-                padding: 6px 20px; 
-                border-radius: 4px; 
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #e2e8f0; }
-        """
+                msg_box.setText("Impossibile aggiornare i saldi.") # This QMessageBox is not styled by _get_msg_box_style
+                msg_box.setIcon(QMessageBox.Icon.Critical) # This QMessageBox is not styled by _get_msg_box_style
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
+                msg_box.exec() # This QMessageBox is not styled by _get_msg_box_style

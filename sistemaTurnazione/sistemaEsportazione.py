@@ -153,4 +153,11 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
         
         elements.append(table)
 
+        elements.append(Paragraph("PT = Piano Terra", style_info))
+        elements.append(Paragraph("P1 = Piano 1", style_info))
+        elements.append(Paragraph("P2 = Piano 2", style_info))
+        elements.append(Paragraph("J = Operatore Jolly", style_info))
+        elements.append(Paragraph("C = Turno Corto", style_info))
+
+
     doc.build(elements)
