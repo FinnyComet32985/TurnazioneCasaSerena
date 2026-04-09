@@ -1493,8 +1493,24 @@ class TurniView(QWidget):
                     dialog.corto_scelto
                 )
                 self.aggiorna_tabella()
-            except ValueError as e:
-                QMessageBox.critical(self, "Errore", str(e))
+            except Exception as e:
+                if "Violazione riposo min" in str(e):
+                    msg_box = QMessageBox(self)
+                    msg_box.setWindowTitle("Violazione Riposo")
+                    msg_box.setText(f"{str(e)}\n\nSi desidera forzare l'assegnazione manuale?")
+                    msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                    msg_box.setIcon(QMessageBox.Icon.Warning)
+                    msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
+                    if msg_box.exec() == QMessageBox.StandardButton.Yes:
+                        self.interfaccia.turnazione.assegna_turno(
+                            self.interfaccia.sistema_dipendenti, id_dip, dt_turno, tipo_fascia,
+                            dialog.piano_scelto, dialog.jolly_scelto, dialog.corto_scelto, force_riposo=True
+                        )
+                        self.aggiorna_tabella()
+                    else:
+                        self.aggiorna_tabella()
+                else:
+                    QMessageBox.critical(self, "Errore", str(e))
                 self.aggiorna_tabella()
 
     def on_cell_clicked(self, row, col):
@@ -1528,7 +1544,24 @@ class TurniView(QWidget):
                 )
                 self.aggiorna_tabella()
             except Exception as e:
-                QMessageBox.warning(self, "Errore", f"Impossibile assegnare: {str(e)}")
+                if "Violazione riposo min" in str(e):
+                    msg_box = QMessageBox(self)
+                    msg_box.setWindowTitle("Violazione Riposo")
+                    msg_box.setText(f"{str(e)}\n\nSi desidera forzare l'assegnazione manuale?")
+                    msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                    msg_box.setIcon(QMessageBox.Icon.Warning)
+                    msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
+                    if msg_box.exec() == QMessageBox.StandardButton.Yes:
+                        try:
+                            self.interfaccia.turnazione.assegna_turno(
+                                self.interfaccia.sistema_dipendenti, dialog.id_scelto, dt_turno, tipo_fascia,
+                                dialog.piano_scelto, dialog.jolly_scelto, dialog.corto_scelto, force_riposo=True
+                            )
+                            self.aggiorna_tabella()
+                        except Exception as ex:
+                            QMessageBox.warning(self, "Errore", str(ex))
+                else:
+                    QMessageBox.warning(self, "Errore", f"Impossibile assegnare: {str(e)}")
                     
     def crea_da_zero(self):
         anno, settimana, _ = self.current_monday.isocalendar()
@@ -1623,7 +1656,7 @@ class TurniView(QWidget):
             msg_box.setWindowTitle("Errore")
             msg_box.setText("Si è verificato un errore durante la generazione automatica.") # This QMessageBox is not styled by _get_msg_box_style
             msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setStyleSheet(self._get_msg_box_style())
+            msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
             msg_box.exec()
 
     def approva_settimana_ui(self):
@@ -1649,7 +1682,7 @@ class TurniView(QWidget):
             msg_box.setText(f"Impossibile approvare la settimana: la copertura dei turni è al {int(perc)}%.\n\n"
                             "Assicurati di aver coperto tutti i posti vacanti secondo i limiti configurati prima di procedere.")
             msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
-            msg_box.setStyleSheet(self._get_msg_box_style())
+            msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
             msg_box.exec()
             return
 
@@ -1675,7 +1708,7 @@ class TurniView(QWidget):
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Impossibile approvare la settimana.")
                 msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
 
     def riapri_settimana_ui(self):
@@ -1701,7 +1734,7 @@ class TurniView(QWidget):
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Impossibile riaprire la settimana.")
                 msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
 
     def svuota_settimana_ui(self):
@@ -1728,7 +1761,7 @@ class TurniView(QWidget):
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Impossibile svuotare la settimana. Verifica che non sia già approvata.")
                 msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
 
     def esporta_pdf(self):
@@ -1762,7 +1795,7 @@ class TurniView(QWidget):
             msg_box.setWindowTitle("Errore Esportazione")
             msg_box.setText(f"Errore durante la creazione del PDF:\n{str(e)}")
             msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setStyleSheet(self._get_msg_box_style())
+            msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
             msg_box.exec()
 
     def get_colored_icon(self, icon_path, color_hex):

@@ -587,7 +587,7 @@ class Turnazione:
             
         return candidati
 
-    def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False, stato: StatoFascia = StatoFascia.CREATO) -> bool:
+    def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False, stato: StatoFascia = StatoFascia.CREATO, force_riposo: bool = False) -> bool:
         """Cerca la fascia specifica e aggiunge l'assegnazione (che salva su DB)."""
         anno, settimana, _ = data_turno.isocalendar()
         settimana_key = (anno, settimana)
@@ -650,7 +650,11 @@ class Turnazione:
                 print("Attenzione: Il dipendente ha già superato il monte ore settimanale. Questo turno sarà interamente straordinario.")
 
         # Verifica vincolo 11 ore di riposo
-        self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly)
+        try:
+            self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly)
+        except ValueError as e:
+            if not force_riposo:
+                raise e
         
         # Verifica vincolo 24 ore riposo settimanale (Warning)
         if not self._check_riposo_settimanale(settimana_key, id_dipendente, data_turno, tipo_fascia, turno_breve):
