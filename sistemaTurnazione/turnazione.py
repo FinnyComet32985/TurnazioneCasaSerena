@@ -419,102 +419,85 @@ class Turnazione:
         Simula l'assegnazione e verifica che venga rispettato il vincolo delle 11 ore di riposo tra i turni,
         controllando anche i turni a cavallo con le settimane adiacenti.
         """
-        # 1. Creiamo un'istanza TEMPORANEA di Turnazione
-        turnazione_simulata = Turnazione()
-        # Ottimizzazione: Copiamo la configurazione dall'istanza attuale
-        turnazione_simulata.max_jolly_per_turno = self.max_jolly_per_turno
-        turnazione_simulata.max_dipendenti_per_piano = self.max_dipendenti_per_piano
-        turnazione_simulata.limiti_fascia = self.limiti_fascia.copy()
-        
-        # 2. Iniettiamo in questa istanza una COPIA della settimana corrente
-        turnazione_simulata.turnazioneSettimanale[settimana_key] = deepcopy(self.turnazioneSettimanale.get(settimana_key, {}))
-        
-        # 3. Aggiungiamo la NUOVA assegnazione alla turnazione simulata
-        fascia_simulata = turnazione_simulata.turnazioneSettimanale[settimana_key].get(data_turno, {}).get(tipo_fascia)
-        if fascia_simulata:
-            fascia_simulata.ripristina_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly))
-        
-        # 4. Recuperiamo TUTTI i turni dalla simulazione per la settimana corrente
-        assegnazioni_dip = turnazione_simulata.get_assegnazioni_dipendente(settimana_key, dipendente_obj.id_dipendente)
-        lista_intervalli = []
+        # 1. Definiamo gli orari del nuovo turno che stiamo provando ad inserire
+        orari_new = self.ORARIO_TURNI["MATTINA CORTA"] if (tipo_fascia == TipoFascia.MATTINA and turno_breve) else self.ORARIO_TURNI[tipo_fascia.value]
+        new_start = datetime.combine(data_turno, time(hour=orari_new[0]))
+        new_end = datetime.combine(data_turno, time(hour=orari_new[1]))
+        if orari_new[1] < orari_new[0]:
+            new_end += timedelta(days=1)
 
-        for item in assegnazioni_dip:
-            fascia_obj: FasciaOraria = item[0]
-            if fascia_obj.tipo == TipoFascia.RIPOSO:
-                continue
+        # 2. Raccogliamo tutti i turni assegnati al dipendente (Settimana corrente + confini)
+        # per trovare i vicini immediati del nuovo turno.
+        altri_turni = []
 
-            orari = self.ORARIO_TURNI[fascia_obj.tipo.value]
-            start_h, end_h = orari[0], orari[1]
-            dt_start = datetime.combine(fascia_obj.data_turno, time(hour=start_h))
-            dt_end = datetime.combine(fascia_obj.data_turno, time(hour=end_h))
-            if end_h < start_h:
-                dt_end += timedelta(days=1)
-            
-            lista_intervalli.append((dt_start, dt_end, fascia_obj.tipo.value))
+        # A. Turni nella settimana corrente
+        for f, a in self.get_assegnazioni_dipendente(settimana_key, dipendente_obj.id_dipendente):
+            if f.tipo == TipoFascia.RIPOSO: continue
+            # Calcoliamo inizio e fine
+            o = self.ORARIO_TURNI["MATTINA CORTA"] if (f.tipo == TipoFascia.MATTINA and a.turnoBreve) else self.ORARIO_TURNI[f.tipo.value]
+            s = datetime.combine(f.data_turno, time(hour=o[0]))
+            e = datetime.combine(f.data_turno, time(hour=o[1]))
+            if o[1] < o[0]: e += timedelta(days=1)
+            altri_turni.append((s, e, f.tipo.value))
 
-        # --- Aggiungiamo i turni di confine per un controllo completo ---
+        # B. Turni di confine (Settimana precedente e successiva)
         anno, settimana = settimana_key
         primo_giorno_settimana = date.fromisocalendar(anno, settimana, 1)
-
-        # A. Turno finale della settimana precedente
+        
+        # Confine Precedente
         data_settimana_prec = primo_giorno_settimana - timedelta(days=1)
         settimana_key_prec = (data_settimana_prec.year, data_settimana_prec.isocalendar()[1])
-        turni_prec = self.get_assegnazioni_dipendente(settimana_key_prec, dipendente_obj.id_dipendente)
-        if turni_prec:
-            fine_ultimo_turno_prec = None
-            ultimo_turno_prec_obj = None
-            for item in turni_prec:
-                fascia_prec: FasciaOraria = item[0]
-                if fascia_prec.tipo == TipoFascia.RIPOSO: continue
-                
-                orari = self.ORARIO_TURNI[fascia_prec.tipo.value]
-                end_time_prec = datetime.combine(fascia_prec.data_turno, time(hour=orari[1]))
-                if orari[1] < orari[0]: end_time_prec += timedelta(days=1)
-                
-                if fine_ultimo_turno_prec is None or end_time_prec > fine_ultimo_turno_prec:
-                    fine_ultimo_turno_prec = end_time_prec
-                    start_time_prec = datetime.combine(fascia_prec.data_turno, time(hour=orari[0]))
-                    ultimo_turno_prec_obj = (start_time_prec, end_time_prec, fascia_prec.tipo.value)
+        for f, a in self.get_assegnazioni_dipendente(settimana_key_prec, dipendente_obj.id_dipendente):
+            if f.tipo == TipoFascia.RIPOSO: continue
+            o = self.ORARIO_TURNI["MATTINA CORTA"] if (f.tipo == TipoFascia.MATTINA and a.turnoBreve) else self.ORARIO_TURNI[f.tipo.value]
+            s = datetime.combine(f.data_turno, time(hour=o[0]))
+            e = datetime.combine(f.data_turno, time(hour=o[1]))
+            if o[1] < o[0]: e += timedelta(days=1)
+            altri_turni.append((s, e, f.tipo.value))
 
-            if ultimo_turno_prec_obj:
-                lista_intervalli.append(ultimo_turno_prec_obj)
-
-        # B. Turno iniziale della settimana successiva
+        # Confine Successivo
         data_settimana_succ = primo_giorno_settimana + timedelta(days=7)
         settimana_key_succ = (data_settimana_succ.year, data_settimana_succ.isocalendar()[1])
-        turni_succ = self.get_assegnazioni_dipendente(settimana_key_succ, dipendente_obj.id_dipendente)
-        if turni_succ:
-            inizio_primo_turno_succ = None
-            primo_turno_succ_obj = None
-            for item in turni_succ:
-                fascia_succ: FasciaOraria = item[0]
-                if fascia_succ.tipo == TipoFascia.RIPOSO: continue
+        for f, a in self.get_assegnazioni_dipendente(settimana_key_succ, dipendente_obj.id_dipendente):
+            if f.tipo == TipoFascia.RIPOSO: continue
+            o = self.ORARIO_TURNI["MATTINA CORTA"] if (f.tipo == TipoFascia.MATTINA and a.turnoBreve) else self.ORARIO_TURNI[f.tipo.value]
+            s = datetime.combine(f.data_turno, time(hour=o[0]))
+            e = datetime.combine(f.data_turno, time(hour=o[1]))
+            if o[1] < o[0]: e += timedelta(days=1)
+            altri_turni.append((s, e, f.tipo.value))
 
-                orari = self.ORARIO_TURNI[fascia_succ.tipo.value]
-                start_time_succ = datetime.combine(fascia_succ.data_turno, time(hour=orari[0]))
+        # 3. Individuiamo il turno immediatamente precedente e quello immediatamente successivo
+        turno_prec = None
+        turno_succ = None
 
-                if inizio_primo_turno_succ is None or start_time_succ < inizio_primo_turno_succ:
-                    inizio_primo_turno_succ = start_time_succ
-                    end_time_succ = datetime.combine(fascia_succ.data_turno, time(hour=orari[1]))
-                    if orari[1] < orari[0]: end_time_succ += timedelta(days=1)
-                    primo_turno_succ_obj = (start_time_succ, end_time_succ, fascia_succ.tipo.value)
-            
-            if primo_turno_succ_obj:
-                lista_intervalli.append(primo_turno_succ_obj)
+        for s, e, tipo in altri_turni:
+            # Turno che finisce prima (o nello stesso istante) dell'inizio del nuovo
+            if e <= new_start:
+                if turno_prec is None or e > turno_prec[1]:
+                    turno_prec = (s, e, tipo)
+            # Turno che inizia dopo (o nello stesso istante) della fine del nuovo
+            if s >= new_end:
+                if turno_succ is None or s < turno_succ[0]:
+                    turno_succ = (s, e, tipo)
 
-        # Ordiniamo i turni in base all'orario di inizio (ora include i confini)
-        lista_intervalli.sort(key=lambda x: x[0])
+        # 4. Verifichiamo i due intervalli di riposo (gap precedente e gap successivo)
+        if turno_prec:
+            diff = (new_start - turno_prec[1]).total_seconds() / 3600
+            if diff < self.PAUSA_TRA_TURNI:
+                msg = (f"Violazione riposo min {self.PAUSA_TRA_TURNI}h: Tra il turno precedente {turno_prec[2]} "
+                       f"({turno_prec[1].strftime('%d/%m %H:%M')}) e il nuovo turno "
+                       f"({new_start.strftime('%d/%m %H:%M')}) passano solo {diff:.1f} ore "
+                       f"(minimo richiesto: {self.PAUSA_TRA_TURNI}h).")
+                raise ValueError(msg)
 
-        # 5. Controllo sequenziale delle 11 ore
-        for i in range(len(lista_intervalli) - 1):
-            turno_corrente = lista_intervalli[i]
-            turno_successivo = lista_intervalli[i+1]
-
-            # Calcoliamo la differenza tra Fine del Corrente e Inizio del Successivo
-            delta = turno_successivo[0] - turno_corrente[1]
-
-            if delta < timedelta(hours=self.PAUSA_TRA_TURNI):
-                raise ValueError(f"Violazione riposo min {self.PAUSA_TRA_TURNI}h: Tra {turno_corrente[2]} e {turno_successivo[2]} passano solo {delta}.")
+        if turno_succ:
+            diff = (turno_succ[0] - new_end).total_seconds() / 3600
+            if diff < self.PAUSA_TRA_TURNI:
+                msg = (f"Violazione riposo min {self.PAUSA_TRA_TURNI}h: Tra il nuovo turno "
+                       f"({new_end.strftime('%d/%m %H:%M')}) e il successivo {turno_succ[2]} "
+                       f"({turno_succ[0].strftime('%d/%m %H:%M')}) passano solo {diff:.1f} ore "
+                       f"(minimo richiesto: {self.PAUSA_TRA_TURNI}h).")
+                raise ValueError(msg)
 
         return True
 
