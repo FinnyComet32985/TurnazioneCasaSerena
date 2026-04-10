@@ -1806,9 +1806,13 @@ class TurniView(QWidget):
                 self.fasce_disponibili
             )
             
-            res = QMessageBox.information(self, "PDF Generato", f"Il file è stato salvato con successo in:\n{path}", 
-                                          QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Ok) # This QMessageBox is not styled by _get_msg_box_style
-            res.setStyleSheet(MESSAGE_BOX_STYLE)
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("PDF Generato")
+            msg_box.setText(f"Il file è stato salvato con successo in:\n{path}")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
+            res = msg_box.exec()
+            
             if res == QMessageBox.StandardButton.Open:
                 import os
                 os.startfile(path)

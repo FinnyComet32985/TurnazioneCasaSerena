@@ -44,6 +44,13 @@ class SistemaGenerazione:
         2. Sequenza/Varietà: Evitiamo sequenze lunghe e favoriamo rotazioni intelligenti (es. Pomeriggio -> Notte).
         3. Carico Settimanale: Chi ha lavorato meno ore nella settimana corrente ha la priorità.
         4. Banca Ore: Chi ha la banca ore più bassa (o negativa) ha la priorità per recuperare.
+
+        # Ordinamento Gerarchico:
+            # 1. holiday_penalty (Rispetto delle feste a rotazione)
+            # 2. varieta_score (Priorità assoluta alla rotazione richiesta)
+            # 3. last_date (Chi non fa questo turno da più tempo)
+            # 4. banca_ore (Banca ore più bassa)
+            # 5. ore_settimana (Meno ore lavorate)
         """
         candidati_con_punteggio = []
 
@@ -104,12 +111,6 @@ class SistemaGenerazione:
                     if any(f.data_turno == d_link and f.tipo != TipoFascia.RIPOSO for f, ass in ass_link):
                         holiday_penalty += 50 # Penalità alta per favorire la rotazione
 
-            # Ordinamento Gerarchico:
-            # 1. holiday_penalty (Rispetto delle feste a rotazione)
-            # 2. varieta_score (Priorità assoluta alla rotazione richiesta)
-            # 3. last_date (Chi non fa questo turno da più tempo)
-            # 4. ore_settimana (Meno ore lavorate)
-            # 5. banca_ore (Banca ore più bassa)
             candidati_con_punteggio.append((
                 dip, 
                 holiday_penalty,
@@ -120,7 +121,7 @@ class SistemaGenerazione:
             ))
         
         random.shuffle(candidati_con_punteggio)
-        candidati_con_punteggio.sort(key=lambda x: (x[1], x[2], x[3], x[4], x[5]))
+        candidati_con_punteggio.sort(key=lambda x: (x[1], x[2], x[3], x[5], x[4]))
         
         return [item[0] for item in candidati_con_punteggio]
 
@@ -155,17 +156,20 @@ class SistemaGenerazione:
                 if fa_notte:
                     continue
                     
-                # 2. Metriche: Ore settimana e Banca Ore
+                # 2. Metriche: Ore settimana, Banca Ore e Piano attuale
                 ore_sett = self.turnazione._get_ore_lavorate_settimana(dip.id_dipendente, (anno, settimana))
-                candidati.append((assegnazione, ore_sett, dip.banca_ore))
+                # Priorità a chi è già al Piano 1 per mantenere l'equilibrio della generazione
+                is_already_p1 = 1 if assegnazione.piano == 1 else 0
+                candidati.append((assegnazione, ore_sett, dip.banca_ore, is_already_p1))
             
             if candidati:
-                # Ordiniamo: Chi ha più ore settimanali e più banca ore viene per primo
-                candidati.sort(key=lambda x: (x[1], x[2]), reverse=True)
+                # Ordiniamo: Preferenza Piano 1, poi chi ha più ore settimanali e più banca ore
+                candidati.sort(key=lambda x: (x[3], x[1], x[2]), reverse=True)
                 best_ass = candidati[0][0]
                 
-                # Applichiamo la modifica
+                # Applichiamo la modifica: il turno breve deve essere svolto al Piano 1
                 best_ass.turnoBreve = True
+                best_ass.piano = 1
                 if sistemaSalvataggio.set_turno_breve(fascia.id_turno, best_ass.dipendente.id_dipendente, True):
                     print(f"  -> Assegnato turno breve a {best_ass.dipendente.nome} {best_ass.dipendente.cognome} il {giorno}")
                 else:

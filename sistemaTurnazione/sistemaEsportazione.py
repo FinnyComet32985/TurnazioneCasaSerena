@@ -14,19 +14,19 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
     """Genera un PDF in formato A4 verticale della turnazione settimanale."""
     
     # Configurazione documento (A4 Verticale) - Margini ottimizzati per singola pagina
-    doc = SimpleDocTemplate(path, pagesize=A4, rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=1.2*cm, bottomMargin=1.2*cm)
+    doc = SimpleDocTemplate(path, pagesize=A4, rightMargin=0.8*cm, leftMargin=0.8*cm, topMargin=1.0*cm, bottomMargin=1.0*cm)
     elements = []
     styles = getSampleStyleSheet()
     
     # --- STILI PERSONALIZZATI ---
-    style_h1 = ParagraphStyle('H1', parent=styles['Normal'], fontSize=14, leading=16, alignment=1, spaceAfter=1, fontName='Helvetica-Bold')
-    style_h2 = ParagraphStyle('H2', parent=styles['Normal'], fontSize=11, leading=13, alignment=1, spaceAfter=5, fontName='Helvetica')
+    style_h1 = ParagraphStyle('H1', parent=styles['Normal'], fontSize=13, leading=15, alignment=1, spaceAfter=1, fontName='Helvetica-Bold')
+    style_h2 = ParagraphStyle('H2', parent=styles['Normal'], fontSize=10, leading=12, alignment=1, spaceAfter=4, fontName='Helvetica')
     style_info = ParagraphStyle('Info', parent=styles['Normal'], fontSize=8.5, leading=10, spaceAfter=2)
     
     # --- INTESTAZIONE ---
     elements.append(Paragraph("ASSOCIAZIONE \"CASA SERENA\"", style_h1))
     elements.append(Paragraph("MATINO", style_h2))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.black, spaceAfter=10))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.black, spaceAfter=5))
     
     elements.append(Paragraph("<b>TURNI OSS</b>", style_h1))
     
@@ -39,7 +39,7 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
     
     elements.append(Paragraph(testo_mese, style_h2))
     elements.append(Paragraph(f"DAL {monday.strftime('%d/%m/%Y')} AL {sunday.strftime('%d/%m/%Y')}", style_h2))
-    elements.append(Spacer(1, 5))
+    elements.append(Spacer(1, 3))
     
     # --- SEZIONE ASSENZE (DIPENDENTE ferie / rol / certificato DAL ... AL ...) ---
     dipendenti = sistema_dipendenti.get_lista_dipendenti()
@@ -68,7 +68,7 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
             except: continue
             
     if found_assenza:
-        elements.append(Spacer(1, 8))
+        elements.append(Spacer(1, 4))
 
     # --- TABELLA TURNI ---
     anno, sett, _ = monday.isocalendar()
@@ -83,7 +83,7 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
         
         for i in range(7):
             dt = monday + timedelta(days=i)
-            giorno_str = f"{giorni_nomi[i]} {dt.day}"
+            giorno_str = f"{giorni_nomi[i]}\n{dt.day}"
             row = [giorno_str]
             
             fasce_giorno = settimana_dict.get(dt, {})
@@ -94,7 +94,8 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
                     for ass in fascia.assegnazioni:
                         tag = ""
                         is_jolly = getattr(ass, 'jolly', False)
-                        if not is_jolly and getattr(ass, 'piano', None) is not None: 
+                        # Non stampiamo il piano per il turno di notte
+                        if not is_jolly and getattr(ass, 'piano', None) is not None and tipo != TipoFascia.NOTTE: 
                             tag += f" {'PT' if ass.piano == 0 else f'P{ass.piano}'}"
                         if is_jolly: tag += " J"
                         if getattr(ass, 'turnoBreve', False): tag += " C"
@@ -109,7 +110,7 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
                     
                     # Organizzazione nomi: due per riga solo se non superano la larghezza cella
                     col_idx = fasce_disponibili.index(tipo) + 1
-                    col_w_pts = [2.2*cm, 3.8*cm, 3.8*cm, 3.8*cm, 3.4*cm][col_idx]
+                    col_w_pts = [1.8*cm, 5.1*cm, 5.1*cm, 3.6*cm, 3.8*cm][col_idx]
                     limit_w = col_w_pts - 12 # Sottraiamo il padding interno (6pt per lato)
                     
                     nomi_wrapped = []
@@ -117,20 +118,25 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
                     count_in_line = 0
                     
                     for n in nomi:
+                        # Se è notte, mettiamo sempre uno sotto l'altro (un nome per riga)
+                        if tipo == TipoFascia.NOTTE:
+                            nomi_wrapped.append(n)
+                            continue
+
                         if not current_line:
                             current_line = n
                             count_in_line = 1
                         else:
                             test_line = f"{current_line}  |  {n}"
                             # Se ci sono già 2 nomi o se il terzo non entrerebbe, andiamo a capo
-                            if count_in_line < 2 and stringWidth(test_line, 'Helvetica-Bold', 11) < limit_w:
+                            if count_in_line < 2 and stringWidth(test_line, 'Helvetica-Bold', 10.5) < limit_w:
                                 current_line = test_line
                                 count_in_line += 1
                             else:
                                 nomi_wrapped.append(current_line)
                                 current_line = n
                                 count_in_line = 1
-                    if current_line:
+                    if current_line and tipo != TipoFascia.NOTTE:
                         nomi_wrapped.append(current_line)
                     row.append("\n".join(nomi_wrapped))
                 else:
@@ -138,27 +144,27 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
             data.append(row)
 
         # Larghezza totale A4 (21cm) - Margini (4cm) = 17cm disponibili
-        table = Table(data, colWidths=[2.2*cm, 3.8*cm, 3.8*cm, 3.8*cm, 3.4*cm])
+        table = Table(data, colWidths=[1.8*cm, 5.1*cm, 5.1*cm, 3.6*cm, 3.8*cm])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
             ('ALIGN', (0, 0), (0, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 11), # Ingrandito a 11
+            ('FONTSIZE', (0, 0), (-1, -1), 10.5), 
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey), 
-            ('TOPPADDING', (0, 0), (-1, -1), 5), # Padding ridotto per far stare tutto in una pagina
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-            ('LEADING', (0, 0), (-1, -1), 13), # Interlinea ottimizzata
+            ('TOPPADDING', (0, 0), (-1, -1), 3), 
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEADING', (0, 0), (-1, -1), 12), 
         ]))
         
         elements.append(table)
 
-        elements.append(Paragraph("PT = Piano Terra", style_info))
-        elements.append(Paragraph("P1 = Piano 1", style_info))
-        elements.append(Paragraph("P2 = Piano 2", style_info))
-        elements.append(Paragraph("J = Operatore Jolly", style_info))
-        elements.append(Paragraph("C = Turno Corto", style_info))
+        # elements.append(Paragraph("PT = Piano Terra", style_info))
+        # elements.append(Paragraph("P1 = Piano 1", style_info))
+        # elements.append(Paragraph("P2 = Piano 2", style_info))
+        # elements.append(Paragraph("J = Operatore Jolly", style_info))
+        # elements.append(Paragraph("C = Turno Corto", style_info))
 
 
     doc.build(elements)
