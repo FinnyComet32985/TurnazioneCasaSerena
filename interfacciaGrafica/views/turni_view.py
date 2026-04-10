@@ -106,6 +106,10 @@ class AssignTurnoDialog(QDialog):
         else:
             self.save_btn_text = "Conferma Assegnazione"
 
+        # Gestione automatica del piano in base alle opzioni Jolly/Corto
+        self.check_jolly.toggled.connect(self.update_piano_visibility)
+        self.check_corto.toggled.connect(self.update_piano_visibility)
+
         layout.addLayout(opts_layout)
         
         # Pulsanti
@@ -124,6 +128,22 @@ class AssignTurnoDialog(QDialog):
         btn_layout.addWidget(btn_annulla)
         
         layout.addLayout(btn_layout)
+        
+        # Aggiornamento iniziale dello stato
+        self.update_piano_visibility()
+        
+    def update_piano_visibility(self):
+        """Imposta automaticamente il piano per i turni corti e disabilita la combo se inutile."""
+        is_jolly = self.check_jolly.isChecked()
+        is_corto = self.check_corto.isChecked()
+        
+        if is_corto:
+            self.combo_piano.setCurrentIndex(1) # Piano 1 (Indice 1 della lista)
+            self.combo_piano.setEnabled(False)
+        elif is_jolly:
+            self.combo_piano.setEnabled(False)
+        else:
+            self.combo_piano.setEnabled(True)
         
     def accept(self):
         self.id_scelto = self.combo.currentData()
@@ -289,10 +309,12 @@ class DipendentePill(QFrame):
         
         # Indicatori: [P1] [J] [C]
         info_tags = []
-        if getattr(assegnazione, 'piano', None) is not None:
+        is_jolly = getattr(assegnazione, 'jolly', False)
+        
+        if not is_jolly and getattr(assegnazione, 'piano', None) is not None:
             p_label = "PT" if assegnazione.piano == 0 else f"P{assegnazione.piano}"
             info_tags.append(f"<span style='color: #2563eb;'>{p_label}</span>")
-        if getattr(assegnazione, 'jolly', False):
+        if is_jolly:
             info_tags.append("<span style='color: #7c3aed;'>J</span>")
         if getattr(assegnazione, 'turnoBreve', False):
             info_tags.append("<span style='color: #ea580c;'>C</span>")

@@ -93,9 +93,10 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
                     nomi = []
                     for ass in fascia.assegnazioni:
                         tag = ""
-                        if getattr(ass, 'piano', None) is not None: 
+                        is_jolly = getattr(ass, 'jolly', False)
+                        if not is_jolly and getattr(ass, 'piano', None) is not None: 
                             tag += f" {'PT' if ass.piano == 0 else f'P{ass.piano}'}"
-                        if getattr(ass, 'jolly', False): tag += " J"
+                        if is_jolly: tag += " J"
                         if getattr(ass, 'turnoBreve', False): tag += " C"
                         
                         # Mostra l'iniziale solo se il cognome non è unico
