@@ -699,7 +699,7 @@ class AssenzeView(QWidget):
         msg_box.setText(f"Sei sicuro di voler eliminare questa registrazione di {assenza.tipo}?\n\nIl saldo delle ferie/ROL verrà riaccreditato automaticamente al dipendente.")
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg_box.setIcon(QMessageBox.Icon.Question)
-        msg_box.setStyleSheet(self._get_msg_box_style())
+        msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
 
         if msg_box.exec() == QMessageBox.StandardButton.Yes:
             success = self.interfaccia.sistema_dipendenti.rimuovi_assenza(self.current_dip_id, assenza.id_assenza)
@@ -710,7 +710,7 @@ class AssenzeView(QWidget):
                 msg_box.setWindowTitle("Errore")
                 msg_box.setText("Impossibile eliminare l'assenza dal database.")
                 msg_box.setIcon(QMessageBox.Icon.Critical) # This QMessageBox is not styled by _get_msg_box_style
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec()
 
     def cmd_edit_assenza(self, assenza):
@@ -829,7 +829,7 @@ class AssenzeView(QWidget):
                 msg_box.setWindowTitle("Dati non validi")
                 msg_box.setText("Assicurati di aver selezionato il tipo di assenza e le date.")
                 msg_box.setIcon(QMessageBox.Icon.Warning)
-                msg_box.setStyleSheet(self._get_msg_box_style())
+                msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
                 msg_box.exec() # This QMessageBox is not styled by _get_msg_box_style
 
     def cmd_modifica_resoconto(self):

@@ -3,7 +3,7 @@ from datetime import date, timedelta, datetime
 from typing import List
 
 import sistemaSalvataggio
-from sistemaDipendenti.dipendente import Dipendente, StatoDipendente
+from sistemaDipendenti.dipendente import Dipendente
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaTurnazione.fasciaOraria import TipoFascia, StatoFascia
 from sistemaTurnazione.turnazione import Turnazione
@@ -65,37 +65,45 @@ class SistemaGenerazione:
             else:
                 last_date = date.min 
 
-            # 2. Analisi sequenza recente (Cosa ha fatto ieri/l'altro ieri?)
+            # 2. Analisi sequenza immediata (Cosa ha fatto nei giorni precedenti?)
             consecutive_count = 0
-            last_type = None
-            
-            # Recuperiamo le assegnazioni già fatte in questa settimana per il dipendente
-            ass_sett = self.turnazione.get_assegnazioni_dipendente((anno, settimana), dip.id_dipendente)
-            ass_sett.sort(key=lambda x: x[0].data_turno, reverse=True) # Dalla più recente
-            
-            if ass_sett:
-                for fascia, _ in ass_sett:
-                    if last_type is None:
-                        last_type = fascia.tipo
-                        consecutive_count = 1
-                    elif fascia.tipo == last_type:
-                        consecutive_count += 1
-                    else:
-                        break
+            tipo_ieri = None
+
+            # Guardiamo indietro i giorni precedenti a prescindere dalla settimana
+            for i in range(1, 5):
+                d_prec = giorno_data - timedelta(days=i)
+                a_p, s_p, _ = d_prec.isocalendar()
+                ass_prec = self.turnazione.get_assegnazioni_dipendente((a_p, s_p), dip.id_dipendente)
+                
+                # Cerchiamo il turno di quel giorno specifico
+                turno_giorno = next((f.tipo for f, ass in ass_prec if f.data_turno == d_prec and f.tipo != TipoFascia.RIPOSO), None)
+                
+                if i == 1:
+                    tipo_ieri = turno_giorno
+                
+                if turno_giorno == tipo_fascia:
+                    consecutive_count += 1
+                else:
+                    break # Sequenza interrotta
 
             # Calcolo Punteggio Varietà (Minore è meglio)
             varieta_score = 0
             
-            # PENALITÀ: Se sta facendo lo stesso turno, penalizziamo pesantemente dopo il 2° giorno
-            if last_type == tipo_fascia:
-                varieta_score += (consecutive_count * 20)
+            # PENALITÀ SEQUENZA: Evitiamo che lo stesso turno si ripeta troppo
+            if consecutive_count == 1:
+                varieta_score += 15 # Leggera preferenza a cambiare tipo di turno
+            elif consecutive_count >= 2:
+                # Se ne ha già fatti 2 consecutivi, applichiamo una penalità drastica per evitare il 3°
+                varieta_score += 150
+                if tipo_fascia == TipoFascia.POMERIGGIO:
+                    varieta_score += 100 # I pomeriggi pesano ancora di più per la stanchezza
             
-            # BONUS "ESCAPE": Se ha fatto Pomeriggi, diamogli la Notte con priorità per sbloccarlo
-            if tipo_fascia == TipoFascia.NOTTE and last_type == TipoFascia.POMERIGGIO:
-                varieta_score -= 30 # Altissima priorità per rompere il ciclo dei pomeriggi
+            # BONUS "ESCAPE": Se ha fatto Pomeriggi, favoriamo la Notte per spezzare il ciclo
+            if tipo_fascia == TipoFascia.NOTTE and tipo_ieri == TipoFascia.POMERIGGIO:
+                varieta_score -= 40 # Alta priorità per "sbloccarlo" dai pomeriggi
             
-            # BONUS ROTAZIONE: Se ha fatto Mattina, può passare a Pomeriggio
-            if tipo_fascia == TipoFascia.POMERIGGIO and last_type == TipoFascia.MATTINA:
+            # BONUS ROTAZIONE STANDARD
+            if tipo_fascia == TipoFascia.POMERIGGIO and tipo_ieri == TipoFascia.MATTINA:
                 varieta_score -= 10
 
             # 3. Carico Ore
@@ -250,7 +258,7 @@ class SistemaGenerazione:
         self._assegna_riposi_mancanti(anno, settimana)
 
         # Post-Processing: Turni Brevi
-        self._applica_turni_brevi(anno, settimana)
+        #self._applica_turni_brevi(anno, settimana)
         
         print("--- Generazione Completata ---")
         return True
