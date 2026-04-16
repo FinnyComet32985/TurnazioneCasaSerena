@@ -152,6 +152,69 @@ class AssignTurnoDialog(QDialog):
         self.corto_scelto = self.check_corto.isChecked()
         super().accept()
 
+class SostituzioneDialog(QDialog):
+    def __init__(self, candidati, dt_turno, tipo_fascia, dip_da_sostituire, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Sostituzione per {dip_da_sostituire.cognome} - {dt_turno.strftime('%d/%m')}")
+        self.setFixedWidth(550)
+        self.id_scelto = None
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        
+        info_txt = f"Seleziona un sostituto per il turno di <b>{tipo_fascia.value}</b> del <b>{dt_turno.strftime('%d/%m/%Y')}</b>.<br/>"
+        info_txt += f"Dipendente assente: <span style='color: #dc2626; font-weight: bold;'>{dip_da_sostituire.nome} {dip_da_sostituire.cognome}</span>"
+        lbl = QLabel(info_txt)
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+        
+        self.table = QTableWidget(len(candidati), 3)
+        self.table.setHorizontalHeaderLabels(["DIPENDENTE", "STATO / VINCOLI", ""])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(2, 90)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table.setFixedHeight(300)
+        self.table.setStyleSheet("QTableWidget { border: 1px solid #e2e8f0; border-radius: 4px; }")
+        
+        for i, c in enumerate(candidati):
+            dip = c["dipendente"]
+            self.table.setItem(i, 0, QTableWidgetItem(f"{dip.cognome} {dip.nome}"))
+            
+            note_item = QTableWidgetItem(c["note"])
+            if not c["disponibile"]:
+                note_item.setForeground(QColor("#dc2626"))
+            elif c["vincolo_violato"]:
+                note_item.setForeground(QColor("#ea580c"))
+            else:
+                note_item.setForeground(QColor("#16a34a"))
+            self.table.setItem(i, 1, note_item)
+            
+            btn = QPushButton("Scegli")
+            btn.setEnabled(c["disponibile"])
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            if c["vincolo_violato"]:
+                btn.setText("Forza")
+                btn.setStyleSheet("background-color: #fff7ed; color: #c2410c; border: 1px solid #fdba74; font-weight: bold;")
+            elif c["disponibile"]:
+                btn.setStyleSheet("background-color: #f0fdf4; color: #166534; border: 1px solid #a7f3d0; font-weight: bold;")
+            
+            btn.clicked.connect(lambda checked, d_id=dip.id_dipendente: self.seleziona(d_id))
+            self.table.setCellWidget(i, 2, btn)
+            
+        layout.addWidget(self.table)
+        
+        btn_annulla = QPushButton("Chiudi")
+        btn_annulla.setStyleSheet("background-color: #f1f5f9; color: #475569; padding: 8px; border-radius: 4px;")
+        btn_annulla.clicked.connect(self.reject)
+        layout.addWidget(btn_annulla)
+        
+    def seleziona(self, id_dipendente):
+        self.id_scelto = id_dipendente
+        self.accept()
+
 class WeekSelectorDialog(QDialog):
     def __init__(self, current_date, parent=None):
         super().__init__(parent)
@@ -282,10 +345,14 @@ class DipendentePill(QFrame):
     deleteRequested = pyqtSignal(int) # id_dipendente
     editRequested = pyqtSignal(object) # assegnazione
     highlightRequested = pyqtSignal(int) # id_dipendente
+    substitutionRequested = pyqtSignal(object, date) # assegnazione, data_turno
 
-    def __init__(self, assegnazione, data_turno, interfaccia, is_highlighted=False, parent=None):
+    def __init__(self, assegnazione, data_turno, interfaccia, stato_fascia, is_highlighted=False, parent=None):
         super().__init__(parent)
         self.assegnazione = assegnazione
+        self.data_turno = data_turno
+        self.interfaccia = interfaccia
+        self.stato_fascia = stato_fascia
         self.is_highlighted = is_highlighted
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
@@ -373,24 +440,40 @@ class DipendentePill(QFrame):
             }
         """)
         
+        edit_action = None
+        delete_action = None
+        sub_action = None
+        
+        is_approved = (self.stato_fascia == StatoFascia.APPROVATA)
+
+        if not is_approved:
+            is_absent = self.interfaccia.sistema_dipendenti.verifica_assenza(self.assegnazione.dipendente.id_dipendente, self.data_turno)
+            if is_absent:
+                sub_action = menu.addAction("Sostituisci...")
+                sub_action.setIcon(self.get_colored_icon("interfacciaGrafica/assets/repeat.svg", "#ea580c"))
+                menu.addSeparator()
+
         highlight_text = "Rimuovi Evidenzia" if self.is_highlighted else "Evidenzia Turni"
         highlight_icon = "interfacciaGrafica/assets/eye-off.svg" if self.is_highlighted else "interfacciaGrafica/assets/eye.svg"
         highlight_action = menu.addAction(highlight_text)
         highlight_action.setIcon(self.get_colored_icon(highlight_icon, "#3b82f6"))
         
-        edit_action = menu.addAction("Modifica")
-        edit_action.setIcon(self.get_colored_icon("interfacciaGrafica/assets/pencil.svg", "#000000"))
-        
-        delete_action = menu.addAction("Elimina")
-        delete_action.setIcon(self.get_colored_icon("interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
+        if not is_approved:
+            edit_action = menu.addAction("Modifica")
+            edit_action.setIcon(self.get_colored_icon("interfacciaGrafica/assets/pencil.svg", "#000000"))
+            
+            delete_action = menu.addAction("Elimina")
+            delete_action.setIcon(self.get_colored_icon("interfacciaGrafica/assets/trash-bin.svg", "#dc2626"))
         
         action = menu.exec(self.mapToGlobal(pos))
-        if action == edit_action:
-            self.editRequested.emit(self.assegnazione)
-        elif action == highlight_action:
+        if action == highlight_action:
             self.highlightRequested.emit(self.assegnazione.dipendente.id_dipendente)
-        elif action == delete_action:
+        elif not is_approved and action == edit_action:
+            self.editRequested.emit(self.assegnazione)
+        elif not is_approved and action == delete_action:
             self.deleteRequested.emit(self.assegnazione.dipendente.id_dipendente)
+        elif not is_approved and sub_action and action == sub_action:
+            self.substitutionRequested.emit(self.assegnazione, self.data_turno)
 
     def get_colored_icon(self, icon_path, color_hex):
         pixmap = QPixmap(resource_path(icon_path))
@@ -410,6 +493,7 @@ class ShiftCellWidget(QWidget):
     pillDeleteRequested = pyqtSignal(int, int, int) # row, col, id_dipendente
     pillEditRequested = pyqtSignal(int, int, object) # row, col, assegnazione
     pillHighlightRequested = pyqtSignal(int, int, int) # row, col, id_dipendente
+    pillSubstitutionRequested = pyqtSignal(int, int, object, date) # row, col, assegnazione, data_turno
 
     def __init__(self, row, col, stato, assegnazioni, data_turno, interfaccia, highlighted_id=None, parent=None):
         super().__init__(parent)
@@ -451,11 +535,12 @@ class ShiftCellWidget(QWidget):
                 r = i // 3 # 3 colonne
                 c = i % 3
                 is_highlighted = (highlighted_id == ass.dipendente.id_dipendente)
-                pill = DipendentePill(ass, self.data_turno, self.interfaccia, is_highlighted=is_highlighted)
+                pill = DipendentePill(ass, self.data_turno, self.interfaccia, stato, is_highlighted=is_highlighted)
                 self.layout.addWidget(pill, r, c)
                 pill.deleteRequested.connect(lambda id_dipendente: self.pillDeleteRequested.emit(self.row, self.col, id_dipendente))
                 pill.editRequested.connect(lambda assegnazione: self.pillEditRequested.emit(self.row, self.col, assegnazione))
                 pill.highlightRequested.connect(lambda id_dipendente: self.pillHighlightRequested.emit(self.row, self.col, id_dipendente))
+                pill.substitutionRequested.connect(lambda ass, dt: self.pillSubstitutionRequested.emit(self.row, self.col, ass, dt))
                 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1457,6 +1542,7 @@ class TurniView(QWidget):
                 cell_widget.pillDeleteRequested.connect(self.rimuovi_dipendente_da_turno)
                 cell_widget.pillEditRequested.connect(self.modifica_assegnazione_turno)
                 cell_widget.pillHighlightRequested.connect(self.toggle_highlight)
+                cell_widget.pillSubstitutionRequested.connect(self.sostituisci_dipendente_da_turno)
                 self.table.setCellWidget(row, table_col, cell_widget)
 
     def toggle_highlight(self, row, col, id_dipendente):
@@ -1475,13 +1561,44 @@ class TurniView(QWidget):
         anno, settimana, _ = dt_turno.isocalendar()
         fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
         if fascia and fascia.stato == StatoFascia.APPROVATA:
-            QMessageBox.information(self, "Blocco Modifica", "Questa settimana è stata APPROVATA e i conteggi banca ore sono stati consolidati.\n\nPer apportare modifiche, clicca sul pulsante 'Riapri Settimana' in alto a destra.")
             return
 
         # Conferma eliminazione
         res = QMessageBox.question(self, "Elimina Turno", "Sei sicuro di voler rimuovere questo dipendente dal turno?")
         if res == QMessageBox.StandardButton.Yes:
             if self.interfaccia.turnazione.rimuovi_assegnazione(id_dipendente, dt_turno, tipo_fascia):
+                self.aggiorna_tabella()
+
+    def sostituisci_dipendente_da_turno(self, row, col, assegnazione, data_turno):
+        tipo_fascia = self.fasce_disponibili[col - 1]
+        
+        # 1. Recupera i candidati con analisi vincoli
+        candidati = self.interfaccia.turnazione.get_candidati_per_sostituzione(
+            self.interfaccia.sistema_dipendenti, data_turno, tipo_fascia
+        )
+        
+        # 2. Mostra il dialogo di sostituzione guidata
+        dialog = SostituzioneDialog(candidati, data_turno, tipo_fascia, assegnazione.dipendente, self)
+        if dialog.exec() and dialog.id_scelto:
+            id_vecchio = assegnazione.dipendente.id_dipendente
+            id_nuovo = dialog.id_scelto
+            
+            # Recuperiamo i parametri del turno per replicarli sul nuovo dipendente
+            piano = getattr(assegnazione, 'piano', 0)
+            jolly = getattr(assegnazione, 'jolly', False)
+            corto = getattr(assegnazione, 'turnoBreve', False)
+            
+            try:
+                # Rimuoviamo il dipendente assente
+                self.interfaccia.turnazione.rimuovi_assegnazione(id_vecchio, data_turno, tipo_fascia)
+                # Assegniamo il nuovo (usiamo force_riposo=True perché il dirigente ha forzato consciamente)
+                self.interfaccia.turnazione.assegna_turno(
+                    self.interfaccia.sistema_dipendenti, id_nuovo, data_turno, tipo_fascia,
+                    piano, jolly, corto, force_riposo=True
+                )
+                self.aggiorna_tabella()
+            except Exception as e:
+                QMessageBox.critical(self, "Errore Sostituzione", str(e))
                 self.aggiorna_tabella()
 
     def modifica_assegnazione_turno(self, row, col, assegnazione):
@@ -1492,7 +1609,6 @@ class TurniView(QWidget):
         anno, settimana, _ = dt_turno.isocalendar()
         fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
         if fascia and fascia.stato == StatoFascia.APPROVATA:
-            QMessageBox.information(self, "Blocco Modifica", "Questa settimana è stata APPROVATA e i conteggi banca ore sono stati consolidati.\n\nPer apportare modifiche, clicca sul pulsante 'Riapri Settimana' in alto a destra.")
             return
         
         dipendenti = self.interfaccia.sistema_dipendenti.get_lista_dipendenti()
@@ -1548,7 +1664,6 @@ class TurniView(QWidget):
         fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
         
         if fascia and fascia.stato == StatoFascia.APPROVATA:
-            QMessageBox.information(self, "Blocco Modifica", "Questa settimana è stata APPROVATA e i conteggi banca ore sono stati consolidati.\n\nPer apportare modifiche, clicca sul pulsante 'Riapri Settimana' in alto a destra.")
             return
 
         dialog = AssignTurnoDialog(dipendenti, dt_turno, tipo_fascia.value, self)

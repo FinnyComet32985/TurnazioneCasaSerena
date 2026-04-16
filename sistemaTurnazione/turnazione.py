@@ -121,6 +121,21 @@ class Turnazione:
                         return True
         return False
 
+    def is_riposo_protetto(self, id_dipendente: int, data_check: date) -> bool:
+        """Verifica se il riposo in una data è obbligatorio a causa di una notte precedente (smontante o riposo post-notte)."""
+        # Controlliamo i due giorni precedenti: se ha fatto notte, oggi è smontante o riposo obbligatorio.
+        for i in [1, 2]:
+            d_prec = data_check - timedelta(days=i)
+            anno, settimana, _ = d_prec.isocalendar()
+            settimana_key = (anno, settimana)
+            
+            sett_dict = self.turnazioneSettimanale.get(settimana_key, {})
+            giorno_dict = sett_dict.get(d_prec, {})
+            fascia_notte = giorno_dict.get(TipoFascia.NOTTE)
+            if fascia_notte and any(a.dipendente.id_dipendente == id_dipendente for a in fascia_notte.assegnazioni):
+                return True
+        return False
+
     def get_turnazione_settimana(self, settimana_key: tuple[int, int]) -> dict[date, dict[TipoFascia, FasciaOraria]]:
         return self.turnazioneSettimanale.get(settimana_key, {})
 
@@ -570,6 +585,99 @@ class Turnazione:
             
         return candidati
 
+    def get_candidati_per_sostituzione(self, sistema_dipendenti: SistemaDipendenti, data_turno: date, tipo_fascia: TipoFascia) -> List[dict]:
+        """
+        Restituisce una lista di tutti i dipendenti con lo stato di disponibilità e eventuali avvisi.
+        Ritorna: List[{"dipendente": Dipendente, "disponibile": bool, "note": str, "vincolo_violato": bool}]
+        """
+        risultato = []
+        anno, settimana, _ = data_turno.isocalendar()
+        settimana_key = (anno, settimana)
+        
+        tutti_dipendenti = sistema_dipendenti.get_lista_dipendenti()
+        
+        for dip in tutti_dipendenti:
+            if dip.stato.value != "ASSUNTO":
+                continue
+            
+            info = {
+                "dipendente": dip,
+                "disponibile": True,
+                "note": "Disponibile",
+                "vincolo_violato": False
+            }
+            
+            # 1. Assenze (Bloccante assoluto)
+            if sistema_dipendenti.verifica_assenza(dip.id_dipendente, data_turno):
+                info["disponibile"] = False
+                info["note"] = "In Assenza (Ferie/Malattia)"
+                risultato.append(info)
+                continue
+
+            assegnazioni_sett = self.get_assegnazioni_dipendente(settimana_key, dip.id_dipendente)
+            
+            # 2. Già impegnato in un turno lavorativo oggi
+            ha_altro_turno = False
+            in_riposo = False
+            for f, a in assegnazioni_sett:
+                if f.data_turno == data_turno:
+                    if f.tipo != TipoFascia.RIPOSO:
+                        ha_altro_turno = True
+                    else:
+                        in_riposo = True
+            
+            if ha_altro_turno:
+                info["disponibile"] = False
+                info["note"] = "Già impegnato in altro turno oggi"
+                risultato.append(info)
+                continue
+            
+            # 3. Riposo Protetto (Bloccante: smontante notte)
+            if self.is_riposo_protetto(dip.id_dipendente, data_turno):
+                info["disponibile"] = False
+                info["note"] = "Riposo post-notte (obbligatorio)"
+                risultato.append(info)
+                continue
+
+            # 4. Vincoli che possono essere forzati (Warning)
+            note_alert = []
+            
+            # 11 ore
+            try:
+                self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dip, turno_breve=False, piano=0, jolly=False)
+            except ValueError:
+                info["vincolo_violato"] = True
+                note_alert.append("Violazione 11h riposo")
+            
+            # 24 ore
+            if not self._check_riposo_settimanale(settimana_key, dip.id_dipendente, data_turno, tipo_fascia, turno_breve=False):
+                info["vincolo_violato"] = True
+                note_alert.append("Violazione riposo settimanale")
+                
+            # 5 giorni consecutivi
+            consecutivi = 0
+            for i in range(1, 6):
+                d_prec = data_turno - timedelta(days=i)
+                a_p, s_p, _ = d_prec.isocalendar()
+                ass_prec = self.get_assegnazioni_dipendente((a_p, s_p), dip.id_dipendente)
+                if any(f.data_turno == d_prec and f.tipo != TipoFascia.RIPOSO for f, ass in ass_prec):
+                    consecutivi += 1
+                else: break
+            if consecutivi >= 5:
+                info["vincolo_violato"] = True
+                note_alert.append("Oltre 5gg consecutivi")
+
+            if info["vincolo_violato"]:
+                info["note"] = " / ".join(note_alert)
+            elif in_riposo:
+                info["note"] = "In riposo ordinario"
+            
+            risultato.append(info)
+            
+        # Ordina: Disponibili puliti, Disponibili con violazioni, Non disponibili
+        risultato.sort(key=lambda x: (not x["disponibile"], x["vincolo_violato"]))
+        return risultato
+
     def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False, stato: StatoFascia = StatoFascia.CREATO, force_riposo: bool = False) -> bool:
         """Cerca la fascia specifica e aggiunge l'assegnazione (che salva su DB)."""
         anno, settimana, _ = data_turno.isocalendar()
@@ -595,7 +703,11 @@ class Turnazione:
                         raise ValueError("Il dipendente è già in RIPOSO in questa data.")
                 else: # Stiamo assegnando un turno lavorativo
                     if f_esistente.tipo == TipoFascia.RIPOSO:
-                        raise ValueError("Impossibile assegnare il turno: il dipendente è già in RIPOSO in questa data. Rimuovere prima il riposo.")
+                        if self.is_riposo_protetto(id_dipendente, data_turno):
+                             raise ValueError("Impossibile assegnare il turno: il dipendente è in riposo obbligatorio (smontante notte).")
+                        else:
+                            # Se non è protetto, rimuoviamo automaticamente il riposo per far posto al nuovo turno
+                            self.rimuovi_assegnazione(id_dipendente, data_turno, TipoFascia.RIPOSO)
                     elif f_esistente.tipo == tipo_fascia:
                         raise ValueError(f"Il dipendente è già assegnato a questa fascia oraria ({tipo_fascia.value}).")
 
