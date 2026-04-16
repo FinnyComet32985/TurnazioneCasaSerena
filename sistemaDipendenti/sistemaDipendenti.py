@@ -188,11 +188,10 @@ class SistemaDipendenti:
         print("--- Esecuzione maturazione automatica ratei mensili ---")
         for dip in self.dipendenti:
             if dip.stato == StatoDipendente.ASSUNTO:
-                # CCNL Cooperative Sociali (Calcolo esatto arrotondato)
-                # FERIE: 26 giorni annui / 12 mesi
-                dip.ferie_rimanenti = round(dip.ferie_rimanenti + (26 / 12), 2)
-                # ROL: 32 ore annue / 12 mesi
-                dip.rol_rimanenti = round(dip.rol_rimanenti + (32 / 12), 2)
+                
+                dip.ferie_rimanenti = dip.ferie_rimanenti + 2,5
+                
+                dip.rol_rimanenti = dip.rol_rimanenti + 3
                 
                 # Salvataggio su DB
                 self.modifica_dipendente(
