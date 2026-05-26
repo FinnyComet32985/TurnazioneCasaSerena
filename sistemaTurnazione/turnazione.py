@@ -45,6 +45,9 @@ class Turnazione:
         else:
             self.turnazioneSettimanale = {}
         
+        self.loaded_weeks = set()
+        self.sistema_dipendenti = None
+
         # Configurazione Default (inizializzata in memoria per evitare query DB in loop)
         self.max_jolly_per_turno = 1
         self.limiti_fascia = {
@@ -57,6 +60,16 @@ class Turnazione:
             TipoFascia.POMERIGGIO: {0: 2, 1: 2, 2: 1, 'jolly': 1},
             TipoFascia.NOTTE: {0: 1, 1: 0, 2: 0, 'jolly': 0}
         }
+
+    def garantisci_caricamento_settimana(self, settimana_key: tuple[int, int]):
+        """Garantisce che i turni per una determinata settimana siano caricati in memoria dal DB."""
+        if not hasattr(self, 'loaded_weeks'):
+            self.loaded_weeks = set()
+        if settimana_key not in self.loaded_weeks:
+            self.loaded_weeks.add(settimana_key)
+            if hasattr(self, 'sistema_dipendenti') and self.sistema_dipendenti is not None:
+                from sistemaCaricamento import load_settimana
+                load_settimana(self, settimana_key, self.sistema_dipendenti)
 
     def load_configuration(self):
         """Carica i parametri di configurazione dal DB o imposta i default."""
@@ -128,6 +141,7 @@ class Turnazione:
             d_prec = data_check - timedelta(days=i)
             anno, settimana, _ = d_prec.isocalendar()
             settimana_key = (anno, settimana)
+            self.garantisci_caricamento_settimana(settimana_key)
             
             sett_dict = self.turnazioneSettimanale.get(settimana_key, {})
             giorno_dict = sett_dict.get(d_prec, {})
@@ -137,6 +151,7 @@ class Turnazione:
         return False
 
     def get_turnazione_settimana(self, settimana_key: tuple[int, int]) -> dict[date, dict[TipoFascia, FasciaOraria]]:
+        self.garantisci_caricamento_settimana(settimana_key)
         return self.turnazioneSettimanale.get(settimana_key, {})
 
     def inizializza_settimana(self, anno: int, settimana: int) -> bool:
@@ -164,6 +179,7 @@ class Turnazione:
         """
         anno, settimana_iso, _ = data_turno.isocalendar()
         settimana_key = (anno, settimana_iso)
+        self.garantisci_caricamento_settimana(settimana_key)
 
         # Controllo anticipato: se la fascia esiste già in memoria, non la ricreiamo nel DB.
         if tipo_fascia in self.turnazioneSettimanale.get(settimana_key, {}).get(data_turno, {}):
@@ -682,6 +698,7 @@ class Turnazione:
         """Cerca la fascia specifica e aggiunge l'assegnazione (che salva su DB)."""
         anno, settimana, _ = data_turno.isocalendar()
         settimana_key = (anno, settimana)
+        self.garantisci_caricamento_settimana(settimana_key)
         
         fascia = self.turnazioneSettimanale.get(settimana_key, {}).get(data_turno, {}).get(tipo_fascia)
         
@@ -777,6 +794,7 @@ class Turnazione:
             
             for giorno_riposo in [data_domani, data_dopodomani]:
                 anno_r, sett_r, _ = giorno_riposo.isocalendar()
+                self.garantisci_caricamento_settimana((anno_r, sett_r))
                 
                 # Inizializza la settimana se non esiste o è incompleta
                 settimana_dict = self.turnazioneSettimanale.get((anno_r, sett_r), {})
@@ -804,6 +822,7 @@ class Turnazione:
     def rimuovi_assegnazione(self, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia) -> bool:
         anno, settimana, _ = data_turno.isocalendar()
         settimana_key = (anno, settimana)
+        self.garantisci_caricamento_settimana(settimana_key)
         
         fascia = self.turnazioneSettimanale.get(settimana_key, {}).get(data_turno, {}).get(tipo_fascia)
         
@@ -826,6 +845,7 @@ class Turnazione:
                 # Cerchiamo se il dipendente ha un riposo in quel giorno
                 # Non usiamo ricorsione infinita, chiamiamo direttamente la logica di rimozione base sulla fascia RIPOSO
                 anno_r, sett_r, _ = giorno_r.isocalendar()
+                self.garantisci_caricamento_settimana((anno_r, sett_r))
                 fascia_r = self.turnazioneSettimanale.get((anno_r, sett_r), {}).get(giorno_r, {}).get(TipoFascia.RIPOSO)
                 if fascia_r:
                     # Rimuoviamo il dipendente dal riposo (se presente)
@@ -839,6 +859,7 @@ class Turnazione:
         riportando i turni allo stato 'GENERATA' e svuotando la memoria.
         """
         settimana_key = (anno, settimana)
+        self.garantisci_caricamento_settimana(settimana_key)
         settimana_dict = self.turnazioneSettimanale.get(settimana_key, {})
         
         if not settimana_dict:
@@ -861,6 +882,7 @@ class Turnazione:
         for i in [1, 2]:
             data_prec = primo_giorno - timedelta(days=i)
             a_p, s_p, _ = data_prec.isocalendar()
+            self.garantisci_caricamento_settimana((a_p, s_p))
             fascia_notte_prec = self.turnazioneSettimanale.get((a_p, s_p), {}).get(data_prec, {}).get(TipoFascia.NOTTE)
             
             if fascia_notte_prec:
@@ -883,6 +905,7 @@ class Turnazione:
                     
                     for giorno_r in [data_domani, data_dopodomani]:
                         anno_r, sett_r, _ = giorno_r.isocalendar()
+                        self.garantisci_caricamento_settimana((anno_r, sett_r))
                         fascia_r = self.turnazioneSettimanale.get((anno_r, sett_r), {}).get(giorno_r, {}).get(TipoFascia.RIPOSO)
                         if fascia_r:
                             # Rimuoviamo il dipendente dal riposo su DB e in memoria
@@ -916,6 +939,7 @@ class Turnazione:
         2. Assegna RIPOSO a tutti i dipendenti che non hanno un turno o un'assenza.
         """
         anno, settimana = settimana_key
+        self.garantisci_caricamento_settimana(settimana_key)
         settimana_dict = self.turnazioneSettimanale.get(settimana_key)
 
         if not settimana_dict:
@@ -954,6 +978,7 @@ class Turnazione:
         3. Aggiorna la banca ore dei dipendenti (aggiungendo il saldo).
         4. Imposta lo stato di tutti i turni della settimana su APPROVATA.
         """
+        self.garantisci_caricamento_settimana(settimana_key)
         # Assicuriamo che tutte le fasce RIPOSO esistano e siano riempite
         self.riempi_riposi_settimana(sistema_dipendenti, settimana_key)
 
@@ -1001,6 +1026,7 @@ class Turnazione:
         2. Calcola il saldo ore (basato sui turni attuali) e lo SOTTRAE alla banca ore (annullando l'effetto dell'approvazione).
         3. Riporta lo stato dei turni su MODIFICATA.
         """
+        self.garantisci_caricamento_settimana(settimana_key)
         settimana_dict = self.turnazioneSettimanale.get(settimana_key, {})
         
         # Identifichiamo i dipendenti
@@ -1040,6 +1066,7 @@ class Turnazione:
         if isinstance(info_settimana, dict):
             settimana_dict = info_settimana
         else:
+            self.garantisci_caricamento_settimana(info_settimana)
             settimana_dict = self.turnazioneSettimanale.get(info_settimana, {})
 
         for giorno_dict in settimana_dict.values():

@@ -146,7 +146,7 @@ class SistemaGenerazione:
         giorni_settimana = [primo_giorno + timedelta(days=i) for i in range(7)]
         
         for giorno in giorni_settimana:
-            fascia = self.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(giorno, {}).get(TipoFascia.MATTINA)
+            fascia = self.turnazione.get_turnazione_settimana((anno, settimana)).get(giorno, {}).get(TipoFascia.MATTINA)
             if not fascia or not fascia.assegnazioni:
                 continue
 
@@ -223,7 +223,7 @@ class SistemaGenerazione:
                     target_operatori = len(slots_obiettivi)
 
                     # Controlliamo quanti ne abbiamo già (nel caso di rigenerazione parziale)
-                    fascia_obj = self.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(giorno, {}).get(tipo_fascia)
+                    fascia_obj = self.turnazione.get_turnazione_settimana((anno, settimana)).get(giorno, {}).get(tipo_fascia)
                     count_attuale = len(fascia_obj.assegnazioni) if fascia_obj else 0
                     
                     while count_attuale < target_operatori:

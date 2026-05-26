@@ -189,7 +189,7 @@ class SistemaDipendenti:
         for dip in self.dipendenti:
             if dip.stato == StatoDipendente.ASSUNTO:
                 
-                dip.ferie_rimanenti = dip.ferie_rimanenti + 2,5
+                dip.ferie_rimanenti = dip.ferie_rimanenti + 2.5
                 
                 dip.rol_rimanenti = dip.rol_rimanenti + 3
                 

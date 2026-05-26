@@ -1,5 +1,6 @@
 import re
 import sqlite3
+from datetime import date, datetime, timedelta
 from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
 from sistemaTurnazione.turnazione import Turnazione
 from sistemaDipendenti.variazioneBancaOre import VariazioneBancaOre
@@ -60,17 +61,60 @@ def load_dipendenti() -> SistemaDipendenti:
 
 
 def load_turni(sistema_dipendenti: SistemaDipendenti) -> Turnazione:
+    turnazione = Turnazione()
+    turnazione.sistema_dipendenti = sistema_dipendenti
+    turnazione.loaded_weeks = set()
+
+    # Carichiamo le settimane recenti: precedente, corrente, successiva
+    today = date.today()
+    current_monday = today - timedelta(days=today.weekday())
+
+    for offset in [-1, 0, 1]:
+        d = current_monday + timedelta(weeks=offset)
+        anno, settimana, _ = d.isocalendar()
+        key = (anno, settimana)
+        load_settimana(turnazione, key, sistema_dipendenti)
+        turnazione.loaded_weeks.add(key)
+
+    return turnazione
+
+
+def load_settimana(turnazione: Turnazione, settimana_key: tuple[int, int], sistema_dipendenti: SistemaDipendenti):
+    anno, settimana = settimana_key
+    # Calcola il primo giorno (Lunedì) della settimana ISO
+    primo_giorno = date.fromisocalendar(anno, settimana, 1)
+    ultimo_giorno = primo_giorno + timedelta(days=6)
+
     connection = sqlite3.connect('./db/turnazione.db')
     cursor = connection.cursor()
 
-    query = "select * from turno"
-    cursor.execute(query)
+    # Recupera tutti i turni nel range di date della settimana
+    query_turni = "SELECT idTurno, dataTurno, fasciaOraria, stato FROM turno WHERE dataTurno >= ? AND dataTurno <= ?"
+    cursor.execute(query_turni, (primo_giorno.strftime("%Y-%m-%d"), ultimo_giorno.strftime("%Y-%m-%d")))
     turni_rows = cursor.fetchall()
 
-    turnazione = Turnazione()
+    if not turni_rows:
+        connection.close()
+        return
+
+    # Recupera tutte le assegnazioni della settimana
+    query_lavora = """
+        SELECT l.idTurno, l.idDipendente, l.piano, l.jolly, l.turnoBreve 
+        FROM lavora l 
+        JOIN turno t ON l.idTurno = t.idTurno 
+        WHERE t.dataTurno >= ? AND t.dataTurno <= ?
+    """
+    cursor.execute(query_lavora, (primo_giorno.strftime("%Y-%m-%d"), ultimo_giorno.strftime("%Y-%m-%d")))
+    lavora_rows = cursor.fetchall()
+    connection.close()
+
+    # Raggruppa le assegnazioni per idTurno
+    lavora_by_turno = {}
+    for lav in lavora_rows:
+        id_turno = lav[0]
+        lavora_by_turno.setdefault(id_turno, []).append(lav)
 
     for turno_row in turni_rows:
-        # turno_row: (idTurno, dataTurno, fasciaOraria, stato)
         id_turno = turno_row[0]
         
         turnazione.ripristina_fascia(
@@ -80,27 +124,19 @@ def load_turni(sistema_dipendenti: SistemaDipendenti) -> Turnazione:
             stato_str=turno_row[3]
         )
 
-        # Carichiamo le assegnazioni (lavora) per questo turno
-        query_lavora = "SELECT idDipendente, piano, jolly, turnoBreve FROM lavora WHERE idTurno = ?"
-        cursor.execute(query_lavora, (id_turno,))
-        lavora_rows = cursor.fetchall()
-
-        for lav in lavora_rows:
-            # Risolviamo l'ID in Oggetto Dipendente usando il sistema passato
-            dipendente_obj = sistema_dipendenti.get_dipendente(lav[0])
+        for lav in lavora_by_turno.get(id_turno, []):
+            dipendente_obj = sistema_dipendenti.get_dipendente(lav[1])
             if dipendente_obj is None:
                 continue
 
             turnazione.ripristina_assegnazione(
                 id_turno=id_turno,
                 dipendente=dipendente_obj,
-                piano=lav[1],
-                jolly=bool(lav[2]),
-                turno_breve=bool(lav[3])
+                piano=lav[2],
+                jolly=bool(lav[3]),
+                turno_breve=bool(lav[4])
             )
-    
-    connection.close()
-    return turnazione
+
 
 
 def load_last_update():

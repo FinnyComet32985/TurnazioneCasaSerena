@@ -1559,7 +1559,7 @@ class TurniView(QWidget):
         
         # Check approvazione
         anno, settimana, _ = dt_turno.isocalendar()
-        fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
+        fascia = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana)).get(dt_turno, {}).get(tipo_fascia)
         if fascia and fascia.stato == StatoFascia.APPROVATA:
             return
 
@@ -1607,7 +1607,7 @@ class TurniView(QWidget):
         
         # Check approvazione
         anno, settimana, _ = dt_turno.isocalendar()
-        fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
+        fascia = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana)).get(dt_turno, {}).get(tipo_fascia)
         if fascia and fascia.stato == StatoFascia.APPROVATA:
             return
         
@@ -1661,7 +1661,7 @@ class TurniView(QWidget):
         
         # Recupera la fascia selezionata per controllare lo stato
         anno, settimana, _ = dt_turno.isocalendar()
-        fascia = self.interfaccia.turnazione.turnazioneSettimanale.get((anno, settimana), {}).get(dt_turno, {}).get(tipo_fascia)
+        fascia = self.interfaccia.turnazione.get_turnazione_settimana((anno, settimana)).get(dt_turno, {}).get(tipo_fascia)
         
         if fascia and fascia.stato == StatoFascia.APPROVATA:
             return
