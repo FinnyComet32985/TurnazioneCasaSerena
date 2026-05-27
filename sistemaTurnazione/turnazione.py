@@ -299,6 +299,67 @@ class Turnazione:
         _, _, saldo = self.get_dettaglio_ore_settimanale(id_dipendente, settimana_key, sistema_dipendenti)
         return saldo
 
+    def get_dettaglio_ore_mensile(self, id_dipendente: int, mese: int, anno: int, sistema_dipendenti: SistemaDipendenti) -> tuple[float, float]:
+        """
+        Calcola il dettaglio ore di un dipendente per un intero mese (ore lavorate e ore assenza).
+        Garantisce il caricamento delle settimane necessarie dal database tramite lazy loading.
+        """
+        import calendar
+        _, num_giorni = calendar.monthrange(anno, mese)
+        inizio_mese = date(anno, mese, 1)
+        fine_mese = date(anno, mese, num_giorni)
+        
+        ore_lavorate = 0.0
+        
+        # Troviamo tutte le settimane coinvolte nel mese
+        curr = inizio_mese
+        settimane_viste = set()
+        
+        while curr <= fine_mese:
+            anno_iso, sett_iso, _ = curr.isocalendar()
+            sett_key = (anno_iso, sett_iso)
+            
+            if sett_key not in settimane_viste:
+                # Carichiamo la settimana in memoria se non presente
+                self.garantisci_caricamento_settimana(sett_key)
+                settimane_viste.add(sett_key)
+                
+                sett_dict = self.turnazioneSettimanale.get(sett_key, {})
+                for data_turno, fasce_dict in sett_dict.items():
+                    # Consideriamo solo i turni che ricadono nel mese richiesto
+                    if data_turno.month == mese and data_turno.year == anno:
+                        for fascia in fasce_dict.values():
+                            if fascia.tipo == TipoFascia.RIPOSO:
+                                continue
+                            for assegnazione in fascia.assegnazioni:
+                                if assegnazione.dipendente.id_dipendente == id_dipendente:
+                                    if fascia.tipo == TipoFascia.MATTINA and assegnazione.turnoBreve:
+                                        ore_lavorate += self.ORE_TURNI["MATTINA CORTA"]
+                                    else:
+                                        ore_lavorate += self.ORE_TURNI.get(fascia.tipo.value, 0)
+            curr += timedelta(days=1)
+
+        # Calcolo ore assenze nel mese (Ferie/Certificato = 7.6h, ROL = ore effettive)
+        ore_assenze = 0.0
+        dip = sistema_dipendenti.get_dipendente(id_dipendente)
+        if dip:
+            fmt = "%Y-%m-%d %H:%M:%S"
+            for ass in dip.assenze_programmate:
+                d_start = datetime.strptime(ass.data_inizio, fmt).date()
+                d_end = datetime.strptime(ass.data_fine, fmt).date()
+                inter_start = max(inizio_mese, d_start)
+                inter_end = min(fine_mese, d_end)
+                
+                if inter_start <= inter_end:
+                    if ass.tipo == "ROL":
+                        ore_assenze += (datetime.strptime(ass.data_fine, fmt) - datetime.strptime(ass.data_inizio, fmt)).total_seconds() / 3600
+                    else:
+                        curr_d = inter_start
+                        while curr_d <= inter_end:
+                            if curr_d.weekday() < 5: ore_assenze += 7.6
+                            curr_d += timedelta(days=1)
+        return round(ore_lavorate, 2), round(ore_assenze, 2)
+
     def _check_media_ore_4_mesi(self, id_dipendente: int, data_riferimento: date, nome_dipendente: str = "") -> bool:
         """
         Controlla la media delle ore lavorative nelle ultime 16 settimane (circa 4 mesi)
