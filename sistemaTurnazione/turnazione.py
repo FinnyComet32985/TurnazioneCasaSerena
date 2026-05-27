@@ -781,7 +781,7 @@ class Turnazione:
                         raise ValueError("Il dipendente è già in RIPOSO in questa data.")
                 else: # Stiamo assegnando un turno lavorativo
                     if f_esistente.tipo == TipoFascia.RIPOSO:
-                        if self.is_riposo_protetto(id_dipendente, data_turno):
+                        if self.is_riposo_protetto(id_dipendente, data_turno) and not force_riposo:
                              raise ValueError("Impossibile assegnare il turno: il dipendente è in riposo obbligatorio (smontante notte).")
                         else:
                             # Se non è protetto, rimuoviamo automaticamente il riposo per far posto al nuovo turno

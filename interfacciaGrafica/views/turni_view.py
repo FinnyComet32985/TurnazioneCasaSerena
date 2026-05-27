@@ -1632,9 +1632,9 @@ class TurniView(QWidget):
                 )
                 self.aggiorna_tabella()
             except Exception as e:
-                if "Violazione riposo min" in str(e):
+                if "Violazione riposo min" in str(e) or "riposo obbligatorio" in str(e):
                     msg_box = QMessageBox(self)
-                    msg_box.setWindowTitle("Violazione Riposo")
+                    msg_box.setWindowTitle("Vincolo Riposo")
                     msg_box.setText(f"{str(e)}\n\nSi desidera forzare l'assegnazione manuale?")
                     msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                     msg_box.setIcon(QMessageBox.Icon.Warning)
@@ -1681,9 +1681,9 @@ class TurniView(QWidget):
                 )
                 self.aggiorna_tabella()
             except Exception as e:
-                if "Violazione riposo min" in str(e):
+                if "Violazione riposo min" in str(e) or "riposo obbligatorio" in str(e):
                     msg_box = QMessageBox(self)
-                    msg_box.setWindowTitle("Violazione Riposo")
+                    msg_box.setWindowTitle("Vincolo Riposo")
                     msg_box.setText(f"{str(e)}\n\nSi desidera forzare l'assegnazione manuale?")
                     msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                     msg_box.setIcon(QMessageBox.Icon.Warning)
@@ -1815,13 +1815,13 @@ class TurniView(QWidget):
         
         if perc < 100:
             msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("Approvazione Negata")
-            msg_box.setText(f"Impossibile approvare la settimana: la copertura dei turni è al {int(perc)}%.\n\n"
-                            "Assicurati di aver coperto tutti i posti vacanti secondo i limiti configurati prima di procedere.")
-            msg_box.setIcon(QMessageBox.Icon.Warning) # This QMessageBox is not styled by _get_msg_box_style
+            msg_box.setWindowTitle("Copertura Incompleta")
+            msg_box.setText(f"La copertura dei turni è al {int(perc)}%.\n\nVuoi procedere comunque con l'approvazione?")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
             msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
-            msg_box.exec()
-            return
+            if msg_box.exec() == QMessageBox.StandardButton.No:
+                return
 
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Approvazione Settimana")
