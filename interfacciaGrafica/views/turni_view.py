@@ -2,7 +2,7 @@ from path_util import resource_path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout,
     QPushButton, QTableWidget, QTableWidgetItem, QFileDialog,
-    QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog, QCheckBox,
+    QSpinBox, QHeaderView, QMessageBox, QComboBox, QDialog, QCheckBox, QSpacerItem,
     QFrame, QScrollArea, QSizePolicy, QAbstractItemView, QProgressBar, QCompleter, QMenu,
     QProgressDialog, QApplication, QDialogButtonBox
 )
@@ -1670,35 +1670,89 @@ class TurniView(QWidget):
         if dialog.exec() and dialog.id_scelto is not None:
             # Esegui assegnazione con parametri estesi
             try:
-                self.interfaccia.turnazione.assegna_turno(
-                    self.interfaccia.sistema_dipendenti, 
-                    dialog.id_scelto, 
-                    dt_turno, 
-                    tipo_fascia, 
-                    dialog.piano_scelto, 
-                    dialog.jolly_scelto, 
-                    dialog.corto_scelto
-                )
-                self.aggiorna_tabella()
+                self._esegui_assegnazione_con_gestione_errori(dialog.id_scelto, dt_turno, tipo_fascia, dialog.piano_scelto, dialog.jolly_scelto, dialog.corto_scelto)
             except Exception as e:
-                if "Violazione riposo min" in str(e) or "riposo obbligatorio" in str(e):
-                    msg_box = QMessageBox(self)
-                    msg_box.setWindowTitle("Vincolo Riposo")
-                    msg_box.setText(f"{str(e)}\n\nSi desidera forzare l'assegnazione manuale?")
-                    msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                    msg_box.setIcon(QMessageBox.Icon.Warning)
-                    msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
-                    if msg_box.exec() == QMessageBox.StandardButton.Yes:
-                        try:
-                            self.interfaccia.turnazione.assegna_turno(
-                                self.interfaccia.sistema_dipendenti, dialog.id_scelto, dt_turno, tipo_fascia,
-                                dialog.piano_scelto, dialog.jolly_scelto, dialog.corto_scelto, force_riposo=True
-                            )
-                            self.aggiorna_tabella()
-                        except Exception as ex:
-                            QMessageBox.warning(self, "Errore", str(ex))
-                else:
-                    QMessageBox.warning(self, "Errore", f"Impossibile assegnare: {str(e)}")
+                 QMessageBox.critical(self, "Errore Inaspettato", str(e))
+
+    def _esegui_assegnazione_con_gestione_errori(self, id_dip, dt, tipo, piano, jolly, corto, force_r=False, force_o=False, prop_f=False, ignore_auto_r=False, depth=0):
+        """Helper per gestire i vari tipi di errore con dialoghi a scelta multipla."""
+        if depth > 2: # Sicurezza anti-loop
+             return
+             
+        try:
+            self.interfaccia.turnazione.assegna_turno(
+                self.interfaccia.sistema_dipendenti, id_dip, dt, tipo,
+                piano, jolly, corto, force_riposo=force_r, force_overwrite=force_o, propagate_force=prop_f, ignore_auto_rest_errors=ignore_auto_r
+            )
+            self.aggiorna_tabella()
+        except Exception as e:
+            err_msg = str(e)
+            msg_box = QMessageBox(self)
+            msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
+            msg_box.setTextFormat(Qt.TextFormat.RichText) # Permette il wrapping corretto e grassetti
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setMinimumWidth(500) # Forza una larghezza minima per evitare troncamenti
+            
+            # Trucco per forzare la dimensione minima ed evitare il troncamento del testo
+            spacer = QSpacerItem(450, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+            msg_box.layout().addItem(spacer, msg_box.layout().rowCount(), 0, 1, msg_box.layout().columnCount())
+
+            # Gestione specifica per CONFLITTO_AUTO_RIPOSO (3 opzioni)
+            if "CONFLITTO_AUTO_RIPOSO" in err_msg:
+                msg_box.setWindowTitle("Conflitto Turni")
+                clean_msg = err_msg.split(": ")[1] if ":" in err_msg else err_msg
+                # Usiamo un div con width per forzare il wrapping e impedire il troncamento (...)
+                msg_box.setText(f"<div style='line-height: 140%; width: 450px;'>{clean_msg}</div>")
+                
+                btn_sovrascrivi = msg_box.addButton("Sostituisci turno esistente", QMessageBox.ButtonRole.AcceptRole)
+                btn_mantieni = msg_box.addButton("Mantieni turno precedente (salta riposo)", QMessageBox.ButtonRole.ActionRole)
+                
+                btn_annulla = msg_box.addButton("Annulla operazione", QMessageBox.ButtonRole.RejectRole)
+                
+                msg_box.exec()
+                if msg_box.clickedButton() == btn_sovrascrivi:
+                    self._esegui_assegnazione_con_gestione_errori(
+                        id_dip, dt, tipo, piano, jolly, corto, 
+                        force_r=True, force_o=True, prop_f=True, depth=depth+1
+                    )
+                elif msg_box.clickedButton() == btn_mantieni:
+                    # Riprova l'assegnazione ignorando i fallimenti dei riposi automatici
+                    # E applica force_r=True per bypassare eventuali violazioni 11h della notte stessa
+                    self._esegui_assegnazione_con_gestione_errori(id_dip, dt, tipo, piano, jolly, corto, force_r=True, ignore_auto_r=True, depth=depth+1)
+            
+            # Gestione conflitti di sovrascrittura generici (2 opzioni)
+            elif any(x in err_msg for x in ["CONFLITTO_SLOT", "CONFLITTO_RIPOSO"]):
+                msg_box.setWindowTitle("Conflitto Turni")
+                clean_msg = err_msg.split(": ")[1] if ":" in err_msg else err_msg
+                msg_box.setText(f"<div style='line-height: 140%; width: 450px;'>{clean_msg}</div>")
+                
+                btn_sovrascrivi = msg_box.addButton("Sostituisci turno esistente", QMessageBox.ButtonRole.AcceptRole)
+                btn_annulla = msg_box.addButton("Annulla operazione", QMessageBox.ButtonRole.RejectRole)
+                
+                msg_box.exec()
+                if msg_box.clickedButton() == btn_sovrascrivi:
+                    # Per CONFLITTO_RIPOSO, force_r=True è necessario per rimuovere il riposo protetto
+                    is_rip_protetto = "CONFLITTO_RIPOSO" in err_msg
+                    self._esegui_assegnazione_con_gestione_errori(
+                        id_dip, dt, tipo, piano, jolly, corto, 
+                        force_r=is_rip_protetto, force_o=True, prop_f=True, depth=depth+1
+                    )
+            
+            # Gestione violazioni orarie (11h / 24h) dove i turni non si sovrappongono fisicamente
+            elif "Violazione riposo min" in err_msg:
+                msg_box.setWindowTitle("Vincolo Legale")
+                clean_msg = err_msg.split(": ")[1] if ":" in err_msg else err_msg
+                msg_box.setText(f"<div style='line-height: 140%; width: 450px;'>{clean_msg}</div>")
+                
+                btn_forza = msg_box.addButton("Assegna comunque (Forza)", QMessageBox.ButtonRole.AcceptRole)
+                btn_annulla = msg_box.addButton("Annulla e mantieni vincolo", QMessageBox.ButtonRole.RejectRole)
+                
+                msg_box.exec()
+                if msg_box.clickedButton() == btn_forza:
+                    self._esegui_assegnazione_con_gestione_errori(id_dip, dt, tipo, piano, jolly, corto, force_r=True, depth=depth+1)
+            else:
+                QMessageBox.warning(self, "Attenzione", err_msg)
+            self.aggiorna_tabella()
                     
     def crea_da_zero(self):
         anno, settimana, _ = self.current_monday.isocalendar()
@@ -1938,6 +1992,20 @@ class TurniView(QWidget):
             msg_box.setIcon(QMessageBox.Icon.Critical)
             msg_box.setStyleSheet(MESSAGE_BOX_STYLE)
             msg_box.exec()
+
+    def get_colored_icon(self, icon_path, color_hex):
+        """Ricolora un'icona SVG/PNG usando QPainter"""
+        pixmap = QPixmap(resource_path(icon_path))
+        if pixmap.isNull():
+            return QIcon()
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor(color_hex))
+        painter.end()
+        icon = QIcon(pixmap)
+        icon.addPixmap(pixmap, QIcon.Mode.Disabled, QIcon.State.Off)
+        icon.addPixmap(pixmap, QIcon.Mode.Disabled, QIcon.State.On)
+        return icon
 
     def get_colored_icon(self, icon_path, color_hex):
         """Ricolora un'icona SVG/PNG usando QPainter"""

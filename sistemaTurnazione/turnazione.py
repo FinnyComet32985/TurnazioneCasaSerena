@@ -755,7 +755,7 @@ class Turnazione:
         risultato.sort(key=lambda x: (not x["disponibile"], x["vincolo_violato"]))
         return risultato
 
-    def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False, stato: StatoFascia = StatoFascia.CREATO, force_riposo: bool = False) -> bool:
+    def assegna_turno(self, sistema_dipendenti: SistemaDipendenti, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, piano: int = 0, jolly: bool = False, turno_breve: bool = False, stato: StatoFascia = StatoFascia.CREATO, force_riposo: bool = False, force_overwrite: bool = False, propagate_force: bool = False, ignore_auto_rest_errors: bool = False) -> bool:
         """Cerca la fascia specifica e aggiunge l'assegnazione (che salva su DB)."""
         anno, settimana, _ = data_turno.isocalendar()
         settimana_key = (anno, settimana)
@@ -775,19 +775,26 @@ class Turnazione:
         for f_esistente, _ in assegnazioni_sett:
             if f_esistente.data_turno == data_turno:
                 if tipo_fascia == TipoFascia.RIPOSO:
-                    if f_esistente.tipo != TipoFascia.RIPOSO:
-                        raise ValueError(f"Impossibile assegnare RIPOSO: il dipendente ha già un turno di {f_esistente.tipo.value} in questa data.")
+                    if f_esistente.tipo == TipoFascia.RIPOSO:
+                        return True # È già in riposo, non facciamo nulla e consideriamo successo
                     else:
-                        raise ValueError("Il dipendente è già in RIPOSO in questa data.")
+                        # CONFLICT: Trying to assign RIPOSO, but there's an existing shift
+                        if force_overwrite:
+                            self.rimuovi_assegnazione(id_dipendente, data_turno, f_esistente.tipo, skip_approval_check=True)
+                        else:
+                            raise ValueError(f"CONFLITTO_SLOT: Il dipendente ha già un turno di {f_esistente.tipo.value} il {data_turno.strftime('%d/%m')}. Vuoi spostarlo in RIPOSO?")
                 else: # Stiamo assegnando un turno lavorativo
                     if f_esistente.tipo == TipoFascia.RIPOSO:
                         if self.is_riposo_protetto(id_dipendente, data_turno) and not force_riposo:
-                             raise ValueError("Impossibile assegnare il turno: il dipendente è in riposo obbligatorio (smontante notte).")
+                             raise ValueError(f"CONFLITTO_RIPOSO: Il {data_turno.strftime('%d/%m')} è un riposo obbligatorio (post-notte). Vuoi rimuovere il riposo e assegnare comunque il turno?")
                         else:
                             # Se non è protetto, rimuoviamo automaticamente il riposo per far posto al nuovo turno
-                            self.rimuovi_assegnazione(id_dipendente, data_turno, TipoFascia.RIPOSO)
+                            self.rimuovi_assegnazione(id_dipendente, data_turno, TipoFascia.RIPOSO, skip_approval_check=True)
                     elif f_esistente.tipo == tipo_fascia:
-                        raise ValueError(f"Il dipendente è già assegnato a questa fascia oraria ({tipo_fascia.value}).")
+                        raise ValueError(f"CONFLITTO_IDENTICO: Il dipendente è già assegnato alla fascia {tipo_fascia.value} il {data_turno.strftime('%d/%m')}.")
+                    else:
+                        # Caso Morning + Afternoon nello stesso giorno: permesso ma segnalato come warning in altre funzioni
+                        pass
 
         # Early return per i turni di RIPOSO per evitare check inutili
         if tipo_fascia == TipoFascia.RIPOSO:
@@ -864,23 +871,27 @@ class Turnazione:
                     
                 if self.add_turno(giorno_riposo, TipoFascia.RIPOSO, StatoFascia.CREATO):
                     try:
-                        self.assegna_turno(sistema_dipendenti, id_dipendente, giorno_riposo, TipoFascia.RIPOSO, piano=None)
+                        self.assegna_turno(sistema_dipendenti, id_dipendente, giorno_riposo, TipoFascia.RIPOSO, piano=None, force_overwrite=propagate_force, force_riposo=propagate_force, ignore_auto_rest_errors=ignore_auto_rest_errors)
                         desc_riposo = "smontante" if giorno_riposo == data_domani else "riposo"
                         print(f"Assegnazione automatica turno RIPOSO ({desc_riposo}) per {dipendente_obj.nome} {dipendente_obj.cognome} il {giorno_riposo}")
                     except ValueError as e:
+                        if ignore_auto_rest_errors:
+                            print(f"Sostituzione manuale: Mantenuto turno esistente invece del riposo su {giorno_riposo}")
+                            continue
+                            
                         # Controlla se sul giorno_riposo il dipendente ha già un turno di NOTTE
                         turni_giorno = [f.tipo for f, a in self.get_assegnazioni_dipendente((anno_r, sett_r), id_dipendente) if f.data_turno == giorno_riposo]
                         if TipoFascia.NOTTE in turni_giorno:
                             print(f"Riposo su {giorno_riposo} saltato per {dipendente_obj.nome}: il dipendente ha già una NOTTE.")
                             continue
                         
-                        print(f"Rollback Notte per {dipendente_obj.nome} {dipendente_obj.cognome} il {data_turno}: Impossibile assegnare riposo su {giorno_riposo}.")
-                        self.rimuovi_assegnazione(id_dipendente, data_turno, TipoFascia.NOTTE)
-                        raise ValueError(f"Conflitto con riposo obbligatorio: {str(e)}")
+                        # Se fallisce l'automatismo del riposo, segnaliamo il conflitto specifico
+                        self.rimuovi_assegnazione(id_dipendente, data_turno, TipoFascia.NOTTE, skip_approval_check=True)
+                        raise ValueError(f"CONFLITTO_AUTO_RIPOSO: Il riposo post-notte del {giorno_riposo.strftime('%d/%m')} è occupato da un turno di {turni_giorno[0].value}. Vuoi spostarlo in riposo per confermare la NOTTE?")
 
         return esito
 
-    def rimuovi_assegnazione(self, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia) -> bool:
+    def rimuovi_assegnazione(self, id_dipendente: int, data_turno: date, tipo_fascia: TipoFascia, skip_approval_check: bool = False) -> bool:
         anno, settimana, _ = data_turno.isocalendar()
         settimana_key = (anno, settimana)
         self.garantisci_caricamento_settimana(settimana_key)
@@ -891,7 +902,7 @@ class Turnazione:
             print("Fascia oraria non trovata.")
             return False
             
-        if fascia.stato == StatoFascia.APPROVATA:
+        if fascia.stato == StatoFascia.APPROVATA and not skip_approval_check:
             print("Impossibile rimuovere assegnazione: La settimana è APPROVATA. Esegui prima 'Riapri Settimana'.")
             return False
 
