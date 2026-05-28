@@ -1700,7 +1700,7 @@ class TurniView(QWidget):
             # Gestione specifica per CONFLITTO_AUTO_RIPOSO (3 opzioni)
             if "CONFLITTO_AUTO_RIPOSO" in err_msg:
                 msg_box.setWindowTitle("Conflitto Turni")
-                clean_msg = err_msg.split(": ")[1] if ":" in err_msg else err_msg
+                clean_msg = err_msg.split(": ", 1)[1] if ": " in err_msg else err_msg
                 # Usiamo un div con width per forzare il wrapping e impedire il troncamento (...)
                 msg_box.setText(f"<div style='line-height: 140%; width: 450px;'>{clean_msg}</div>")
                 
@@ -1723,7 +1723,7 @@ class TurniView(QWidget):
             # Gestione conflitti di sovrascrittura generici (2 opzioni)
             elif any(x in err_msg for x in ["CONFLITTO_SLOT", "CONFLITTO_RIPOSO"]):
                 msg_box.setWindowTitle("Conflitto Turni")
-                clean_msg = err_msg.split(": ")[1] if ":" in err_msg else err_msg
+                clean_msg = err_msg.split(": ", 1)[1] if ": " in err_msg else err_msg
                 msg_box.setText(f"<div style='line-height: 140%; width: 450px;'>{clean_msg}</div>")
                 
                 btn_sovrascrivi = msg_box.addButton("Sostituisci turno esistente", QMessageBox.ButtonRole.AcceptRole)
@@ -1741,7 +1741,7 @@ class TurniView(QWidget):
             # Gestione violazioni orarie (11h / 24h) dove i turni non si sovrappongono fisicamente
             elif "Violazione riposo min" in err_msg:
                 msg_box.setWindowTitle("Vincolo Legale")
-                clean_msg = err_msg.split(": ")[1] if ":" in err_msg else err_msg
+                clean_msg = err_msg.split(": ", 1)[1] if ": " in err_msg else err_msg
                 msg_box.setText(f"<div style='line-height: 140%; width: 450px;'>{clean_msg}</div>")
                 
                 btn_forza = msg_box.addButton("Assegna comunque (Forza)", QMessageBox.ButtonRole.AcceptRole)
