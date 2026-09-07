@@ -39,16 +39,14 @@ class FasciaOraria:
         if stato is not None:
             self.stato = stato
     
-    def add_assegnazione(self, assegnazione: AssegnazioneTurno):
-        # VINCOLO: massimo numero oss per turno
-        if self.tipo == TipoFascia.MATTINA and len(self.assegnazioni) >=7:
-            print("Errore: nel turno sono già presenti 7 oss")
-            return False
-        elif self.tipo == TipoFascia.POMERIGGIO and len(self.assegnazioni) >= 6:
-            print("Errore: nel turno sono già presenti 6 oss")
-            return False
-        elif self.tipo == TipoFascia.NOTTE and len(self.assegnazioni) >= 5:
-            print("Errore: nel turno sono già presenti 5 oss")
+    def add_assegnazione(self, assegnazione: AssegnazioneTurno, limiti_fascia: dict = None):
+        # VINCOLO: massimo numero oss per turno (usare limiti configurati o hardcoded)
+        if limiti_fascia is None:
+            limiti_fascia = {TipoFascia.MATTINA: 7, TipoFascia.POMERIGGIO: 6, TipoFascia.NOTTE: 5}
+        
+        max_oss = limiti_fascia.get(self.tipo)
+        if max_oss is not None and len(self.assegnazioni) >= max_oss:
+            print(f"Errore: nel turno sono già presenti {max_oss} oss")
             return False
 
         # VINCOLO: Il turno breve è applicabile solo alla fascia MATTINA

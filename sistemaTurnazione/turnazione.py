@@ -798,7 +798,7 @@ class Turnazione:
 
         # Early return per i turni di RIPOSO per evitare check inutili
         if tipo_fascia == TipoFascia.RIPOSO:
-            esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=False, piano=None, jolly=False))
+            esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=False, piano=None, jolly=False), self.limiti_fascia)
             return esito
 
         # Controllo: Massimo 1 NOTTE per settimana (Avviso non bloccante)
@@ -846,7 +846,7 @@ class Turnazione:
 
         # Se tutti i controlli passano, procediamo con l'assegnazione reale
         # L'assegnazione chiama database che se bloccata (es per Trigger Assenze) restituirà False
-        esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly))
+        esito = fascia.add_assegnazione(AssegnazioneTurno(dipendente_obj, turnoBreve=turno_breve, piano=piano, jolly=jolly), self.limiti_fascia)
         if not esito:
             raise ValueError("Assegnazione bloccata dal database. Il dipendente potrebbe essere in Ferie/Malattia in questa data.")
 
