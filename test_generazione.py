@@ -320,6 +320,152 @@ def run_8_6_1():
     return run_generation("8M/6P/1N", 2026, [10, 11, 12], config_overrides=configs)
 
 
+def run_generation_relaxed(test_label, anno, settimane, config_overrides=None):
+    """
+    Versione con vincoli rilassati:
+    - Rimuove limite 5 giorni consecutivi
+    - Riduce riposo 11h a 10h (permette Pomeriggio→Mattina)
+    """
+    patcher = patch_db()
+
+    try:
+        from sistemaDipendenti.sistemaDipendenti import SistemaDipendenti
+        from sistemaTurnazione.turnazione import Turnazione
+        from sistemaTurnazione.sistemaGenerazione import SistemaGenerazione
+        from sistemaTurnazione.fasciaOraria import TipoFascia
+        from sistemaCaricamento import load_dipendenti
+
+        sistema_dipendenti = load_dipendenti()
+        turnazione = Turnazione()
+        turnazione.sistema_dipendenti = sistema_dipendenti
+        turnazione.loaded_weeks = set()
+        turnazione.load_configuration()
+
+        # Override config
+        if config_overrides:
+            turnazione.limiti_fascia = {
+                TipoFascia.MATTINA: 0,
+                TipoFascia.POMERIGGIO: 0,
+                TipoFascia.NOTTE: 0,
+            }
+            for tf in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE]:
+                tf_name = tf.value
+                for piano_key, val in config_overrides.items():
+                    if piano_key.startswith(f"limit_{tf_name}_"):
+                        ppart = piano_key.split("_")[-1]
+                        if ppart.startswith("P"):
+                            piano = int(ppart[1:])
+                        elif ppart == "J":
+                            piano = 'jolly'
+                        else:
+                            continue
+                        turnazione.limiti_piani_fascia[tf][piano] = val
+                turnazione.limiti_fascia[tf] = sum(v for k, v in turnazione.limiti_piani_fascia[tf].items())
+
+        # ── MONKEY-PATCH: Rimuovi vincolo 5 giorni e 11h riposo ──
+        original_check_riposo_tra_turni = turnazione._check_riposo_tra_turni
+        import functools
+
+        @functools.wraps(original_check_riposo_tra_turni)
+        def relaxed_check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve=False, piano=0, jolly=False):
+            # Permetti 10h invece di 11h (Pomeriggio→Mattina)
+            turnazione.PAUSA_TRA_TURNI = 10
+            try:
+                return original_check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly)
+            finally:
+                turnazione.PAUSA_TRA_TURNI = 11  # restaure (non serve in realtà, singolo thread)
+
+        # Sostituisci get_candidati_disponibili con versione rilassata
+        original_get_candidati = turnazione.get_candidati_disponibili
+
+        def relaxed_get_candidati(data_turno, tipo_fascia):
+            """Stesso filtro ma senza i 5 giorni consecutivi e con 10h di riposo."""
+            candidati = []
+            anno_c, settimana_c, _ = data_turno.isocalendar()
+            settimana_key = (anno_c, settimana_c)
+            tutti = sistema_dipendenti.get_lista_dipendenti()
+
+            for dip in tutti:
+                if dip.stato.value != "ASSUNTO": continue
+
+                # SKIP: 5 giorni consecutivi (commentato)
+
+                if sistema_dipendenti.verifica_assenza(dip.id_dipendente, data_turno): continue
+
+                assegnazioni_sett = turnazione.get_assegnazioni_dipendente(settimana_key, dip.id_dipendente)
+                if any(f.data_turno == data_turno for f, ass in assegnazioni_sett): continue
+
+                if tipo_fascia == TipoFascia.NOTTE:
+                    if any(f.tipo == TipoFascia.NOTTE for f, ass in assegnazioni_sett): continue
+
+                try:
+                    # Usa 10h invece di 11h
+                    old_pausa = turnazione.PAUSA_TRA_TURNI
+                    turnazione.PAUSA_TRA_TURNI = 10
+                    turnazione._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dip, turno_breve=False, piano=0, jolly=False)
+                    turnazione.PAUSA_TRA_TURNI = old_pausa
+                except ValueError:
+                    continue
+
+                if not turnazione._check_riposo_settimanale(settimana_key, dip.id_dipendente, data_turno, tipo_fascia, turno_breve=False):
+                    continue
+
+                candidati.append(dip)
+
+            return candidati
+
+        turnazione.get_candidati_disponibili = lambda s, d, t: relaxed_get_candidati(d, t)
+
+        # Stampa configurazione
+        print(f"\n  Configurazione per {test_label} (VINCOLI RILASSATI: no 5gg consecutivi, 10h riposo):")
+        for tf in [TipoFascia.MATTINA, TipoFascia.POMERIGGIO, TipoFascia.NOTTE]:
+            slots = turnazione.limiti_piani_fascia.get(tf, {})
+            total = turnazione.limiti_fascia.get(tf, 0)
+            print(f"    {tf.value}: {dict(slots)} → totale {total}")
+
+        gen = SistemaGenerazione(turnazione, sistema_dipendenti)
+        for settimana in settimane:
+            print(f"\n  [Generazione] Settimana {anno}-{settimana}")
+            gen.genera_turnazione_automatica(anno, settimana, genera_piani=True)
+
+        ok = summarize_result(test_label, sistema_dipendenti, turnazione, anno, settimane)
+        return ok
+
+    except Exception as e:
+        print(f"\n  ERRORE: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        patcher.stop()
+
+
+def run_relaxed_12_8_2():
+    """Test completato con limiti 12/8/2 + vincoli rilassati."""
+    print("\n" + "=" * 60)
+    print("  TEST — 12M/8P/2N con vincoli RILASSATI")
+    print("=" * 60)
+    configs = {
+        "limit_MATTINA_P0": 4, "limit_MATTINA_P1": 4, "limit_MATTINA_P2": 3, "limit_MATTINA_J": 1,
+        "limit_POMERIGGIO_P0": 2, "limit_POMERIGGIO_P1": 3, "limit_POMERIGGIO_P2": 2, "limit_POMERIGGIO_J": 1,
+        "limit_NOTTE_P0": 1, "limit_NOTTE_P1": 1, "limit_NOTTE_P2": 0, "limit_NOTTE_J": 0,
+    }
+    return run_generation_relaxed("12M/8P/2N rilassati", 2026, [10, 11, 12], config_overrides=configs)
+
+
+def run_relaxed_15_10_3():
+    """Test estremi con vincoli rilassati."""
+    print("\n" + "=" * 60)
+    print("  TEST — 15M/10P/3N con vincoli RILASSATI")
+    print("=" * 60)
+    configs = {
+        "limit_MATTINA_P0": 5, "limit_MATTINA_P1": 5, "limit_MATTINA_P2": 3, "limit_MATTINA_J": 2,
+        "limit_POMERIGGIO_P0": 3, "limit_POMERIGGIO_P1": 3, "limit_POMERIGGIO_P2": 2, "limit_POMERIGGIO_J": 2,
+        "limit_NOTTE_P0": 1, "limit_NOTTE_P1": 1, "limit_NOTTE_P2": 1, "limit_NOTTE_J": 0,
+    }
+    return run_generation_relaxed("15M/10P/3N rilassati", 2026, [10, 11], config_overrides=configs)
+
+
 def run_more_nights():
     """Test con 2 notti/giorno — verifica se 21 dipendenti reggono 2 notti per sera."""
     print("\n" + "=" * 60)
@@ -340,6 +486,7 @@ def main():
     parser.add_argument("--stress", action="store_true", help="Solo scenario stress")
     parser.add_argument("--keep", action="store_true", help="Mantiene il DB di test")
     parser.add_argument("--custom", action="store_true", help="Test personalizzati (8M/6P/2N e 8M/6P/1N)")
+    parser.add_argument("--relaxed", action="store_true", help="Test con vincoli rilassati (no 5gg, 10h riposo)")
     args = parser.parse_args()
 
     setup_test_db()
@@ -349,7 +496,7 @@ def main():
             return
 
         results = []
-        run_all = not (args.baseline or args.stress or args.custom)
+        run_all = not (args.baseline or args.stress or args.custom or args.relaxed)
 
         if args.baseline or run_all:
             results.append(("Standard", run_baseline()))
@@ -361,6 +508,10 @@ def main():
         if args.custom:
             results.append(("8M/6P/2N", run_8_6_2()))
             results.append(("8M/6P/1N", run_8_6_1()))
+
+        if args.relaxed:
+            results.append(("12M/8P/2N rilassati", run_relaxed_12_8_2()))
+            results.append(("15M/10P/3N rilassati", run_relaxed_15_10_3()))
 
         if args.stress or run_all:
             results.append(("Estremi", run_stress()))

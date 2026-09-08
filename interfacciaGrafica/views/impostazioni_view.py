@@ -1,7 +1,8 @@
 from path_util import resource_path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, 
-    QPushButton, QFormLayout, QScrollArea, QMessageBox, QFrame, QGridLayout
+    QPushButton, QFormLayout, QScrollArea, QMessageBox, QFrame, QGridLayout,
+    QCheckBox
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon
@@ -147,6 +148,72 @@ class ImpostazioniView(QWidget):
         sys_card.layout().addLayout(sys_form)
         container_layout.addWidget(sys_card)
 
+        # --- CARD 3: VINCOLI OPERATIVI ---
+        constraints_card = self.create_setting_card(
+            "Vincoli Operativi (Generazione)",
+            "Attiva o disabilita i vincoli di riposo applicati durante la generazione automatica della turnazione."
+        )
+        constraints_layout = QVBoxLayout()
+        constraints_layout.setSpacing(15)
+        constraints_layout.setContentsMargins(10, 10, 10, 0)
+
+        # Toggle 1: 5 giorni consecutivi
+        row1 = QHBoxLayout()
+        toggle_consec = QHBoxLayout()
+        self.chk_consecutive = QCheckBox()
+        self.chk_consecutive.setChecked(bool(self.t.enforce_consecutive_days))
+        self.chk_consecutive.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chk_consecutive.setStyleSheet("""
+            QCheckBox { font-size: 14px; color: #0f172a; spacing: 12px; }
+            QCheckBox::indicator { width: 44px; height: 24px; border-radius: 12px; background-color: #e2e8f0; border: 2px solid #cbd5e1; }
+            QCheckBox::indicator:checked { background-color: #3b82f6; border: 2px solid #3b82f6; }
+        """)
+        label_consec = QLabel("Limite 5 giorni consecutivi")
+        label_consec.setMinimumSize(QSize(400, 30))
+        label_consec.setStyleSheet("font-size: 14px; color: #0f172a;")
+        toggle_consec.addWidget(self.chk_consecutive)
+        toggle_consec.addWidget(label_consec)
+        toggle_consec.addStretch()
+        row1.addLayout(toggle_consec)
+
+        desc_consec = QLabel("Quando attivo, un dipendente non potrà lavorare più di 5 giorni consecutivi durante la generazione.")
+        desc_consec.setWordWrap(True)
+        desc_consec.setStyleSheet("font-size: 12px; color: #64748b;")
+        desc_consec.setIndent(10)
+        row1.addWidget(desc_consec)
+        row1.addSpacing(10)
+        constraints_layout.addLayout(row1)
+
+        # Toggle 2: Riposo 11h tra turni
+        row2 = QHBoxLayout()
+        toggle_via = QHBoxLayout()
+        self.chk_via_mattina = QCheckBox()
+        self.chk_via_mattina.setChecked(not bool(self.t.allow_pomeriggio_via_mattina))
+        self.chk_via_mattina.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chk_via_mattina.setStyleSheet("""
+            QCheckBox { font-size: 14px; color: #0f172a; spacing: 12px; }
+            QCheckBox::indicator { width: 44px; height: 24px; border-radius: 12px; background-color: #e2e8f0; border: 2px solid #cbd5e1; }
+            QCheckBox::indicator:checked { background-color: #3b82f6; border: 2px solid #3b82f6; }
+        """)
+        label_via = QLabel("Riposo 11h tra turni")
+        label_via.setMinimumSize(QSize(400, 30))
+        label_via.setStyleSheet("font-size: 14px; color: #0f172a;")
+        toggle_via.addWidget(self.chk_via_mattina)
+        toggle_via.addWidget(label_via)
+        toggle_via.addStretch()
+        row2.addLayout(toggle_via)
+
+        desc_via = QLabel("Quando attivo, impone 11h di riposo minimo tra un turno e il successivo. Quando disattivato, minimo 10h (permette transizioni Pomeriggio→Mattina).")
+        desc_via.setWordWrap(True)
+        desc_via.setStyleSheet("font-size: 12px; color: #64748b;")
+        desc_via.setIndent(10)
+        row2.addWidget(desc_via)
+        row2.addSpacing(10)
+        constraints_layout.addLayout(row2)
+
+        constraints_card.layout().addLayout(constraints_layout)
+        container_layout.addWidget(constraints_card)
+
         container_layout.addStretch()
         
         scroll.setWidget(container)
@@ -217,6 +284,10 @@ class ImpostazioniView(QWidget):
 
             # Parametri Sistema ripristinati
             self.t.set_config_max_jolly(self.spin_jolly_globale.value())
+
+            # Vincoli operativi
+            self.t.set_config_enforce_consecutive_days(int(self.chk_consecutive.isChecked()))
+            self.t.set_config_allow_pomeriggio_via_mattina(0 if self.chk_via_mattina.isChecked() else 1)
 
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle("Successo")

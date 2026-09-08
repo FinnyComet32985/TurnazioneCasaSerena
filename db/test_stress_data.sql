@@ -63,6 +63,8 @@ INSERT INTO configurazione (chiave, valore) VALUES
 ('limit_NOTTE_P1', '0'),
 ('limit_NOTTE_P2', '0'),
 ('limit_NOTTE_J', '0'),
+('enforce_consecutive_days', '1'),
+('allow_pomeriggio_via_mattina', '0'),
 ('last_update', '2026-03-01');
 
 -- Variazioni banca ore per simulare storico

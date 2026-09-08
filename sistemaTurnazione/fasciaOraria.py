@@ -26,7 +26,7 @@ class FasciaOraria:
     assegnazioni: list[AssegnazioneTurno]
     stato: StatoFascia
 
-    def __init__(self, data_turno: Date, tipo: TipoFascia, assegnazioni: list[AssegnazioneTurno] | None = None, stato: StatoFascia | None = None, id_turno: int = None):
+    def __init__(self, data_turno: Date, tipo: TipoFascia, assegnazioni: list[AssegnazioneTurno] | None = None, stato: StatoFascia | None = None, id_turno: int | None = None):
         self.data_turno = data_turno
         self.tipo = tipo
         if id_turno is not None:
@@ -39,7 +39,7 @@ class FasciaOraria:
         if stato is not None:
             self.stato = stato
     
-    def add_assegnazione(self, assegnazione: AssegnazioneTurno, limiti_fascia: dict = None):
+    def add_assegnazione(self, assegnazione: AssegnazioneTurno, limiti_fascia: dict | None = None):
         # VINCOLO: massimo numero oss per turno (usare limiti configurati o hardcoded)
         if limiti_fascia is None:
             limiti_fascia = {TipoFascia.MATTINA: 7, TipoFascia.POMERIGGIO: 6, TipoFascia.NOTTE: 5}

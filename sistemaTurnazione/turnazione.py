@@ -61,6 +61,10 @@ class Turnazione:
             TipoFascia.NOTTE: {0: 1, 1: 0, 2: 0, 'jolly': 0}
         }
 
+        # Vincoli configurabili (default: attivi)
+        self.enforce_consecutive_days = 1  # Controllo 5 giorni consecutivi (1=on, 0=off)
+        self.allow_pomeriggio_via_mattina = 1  # Riposo 11h tra turni (1=enforce 11h, 0=relax to 10h)
+
     def garantisci_caricamento_settimana(self, settimana_key: tuple[int, int]):
         """Garantisce che i turni per una determinata settimana siano caricati in memoria dal DB."""
         if not hasattr(self, 'loaded_weeks'):
@@ -95,6 +99,13 @@ class Turnazione:
             
             # Calcola il totale per fascia (solo per generazione AI, escludendo i limiti manuali)
             self.limiti_fascia[tf] = sum(v for k, v in self.limiti_piani_fascia[tf].items())
+
+        # Vincoli configurabili
+        val = sistemaSalvataggio.get_config('enforce_consecutive_days')
+        self.enforce_consecutive_days = int(val) if val is not None else 1
+
+        val = sistemaSalvataggio.get_config('allow_pomeriggio_via_mattina')
+        self.allow_pomeriggio_via_mattina = int(val) if val is not None else 0
     
     # loading dei turni del DB
     def ripristina_fascia(self, id_turno: int, data_str: str, tipo_fascia_str: str, stato_str: str):
@@ -609,18 +620,18 @@ class Turnazione:
             if dip.stato.value != "ASSUNTO":
                 continue
                 
-            # 2. Vincolo: Massimo 5 giorni consecutivi di lavoro
-            # Controlliamo i 5 giorni precedenti alla data del turno
-            consecutivi = 0
-            for i in range(1, 6):
-                d_prec = data_turno - timedelta(days=i)
-                a_p, s_p, _ = d_prec.isocalendar()
-                ass_prec = self.get_assegnazioni_dipendente((a_p, s_p), dip.id_dipendente)
-                if any(f.data_turno == d_prec and f.tipo != TipoFascia.RIPOSO for f, ass in ass_prec):
-                    consecutivi += 1
-                else: break
-            if consecutivi >= 5:
-                continue
+            # 2. Vincolo: Massimo 5 giorni consecutivi di lavoro (configurabile)
+            if self.enforce_consecutive_days:
+                consecutivi = 0
+                for i in range(1, 6):
+                    d_prec = data_turno - timedelta(days=i)
+                    a_p, s_p, _ = d_prec.isocalendar()
+                    ass_prec = self.get_assegnazioni_dipendente((a_p, s_p), dip.id_dipendente)
+                    if any(f.data_turno == d_prec and f.tipo != TipoFascia.RIPOSO for f, ass in ass_prec):
+                        consecutivi += 1
+                    else: break
+                if consecutivi >= 5:
+                    continue
 
             # 2. Filtro Assenze (Ferie/Malattia)
             if sistema_dipendenti.verifica_assenza(dip.id_dipendente, data_turno):
@@ -645,12 +656,23 @@ class Turnazione:
             if not esito_ore:
                 pass # Gli straordinari sono permessi nella generazione se necessario
                 
-            # 4. Filtro Riposo 11 ore
+            # 4. Filtro Riposo tra turni (configurabile - 11h o 10h per Pomeriggio→Mattina)
             try:
                 self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dip, turno_breve=False, piano=0, jolly=False)
             except ValueError as e:
-                #print(f"  - {dip.nome} escluso: {e}")
-                continue # Viola le 11 ore
+                # Se il flag è attivo, riprova con 10h come fallback
+                if self.allow_pomeriggio_via_mattina:
+                    original_pausa = self.PAUSA_TRA_TURNI
+                    self.PAUSA_TRA_TURNI = 10
+                    try:
+                        self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dip, turno_breve=False, piano=0, jolly=False)
+                    except ValueError:
+                        self.PAUSA_TRA_TURNI = original_pausa
+                        continue  # pure 10h non bastano
+                    finally:
+                        self.PAUSA_TRA_TURNI = original_pausa
+                else:
+                    continue  # Viola le 11h
                 
             # 5. Filtro Riposo Settimanale (BLOCCANTE per garantire le 24h di riposo)
             if not self._check_riposo_settimanale(settimana_key, dip.id_dipendente, data_turno, tipo_fascia, turno_breve=False):
@@ -1170,3 +1192,11 @@ class Turnazione:
     def set_config_limite_fascia(self, tipo_fascia: TipoFascia, valore: int):
         self.limiti_fascia[tipo_fascia] = valore
         sistemaSalvataggio.save_config(f'limit_{tipo_fascia.value}', str(valore))
+
+    def set_config_enforce_consecutive_days(self, valore: int):
+        self.enforce_consecutive_days = valore
+        sistemaSalvataggio.save_config('enforce_consecutive_days', str(valore))
+
+    def set_config_allow_pomeriggio_via_mattina(self, valore: int):
+        self.allow_pomeriggio_via_mattina = valore
+        sistemaSalvataggio.save_config('allow_pomeriggio_via_mattina', str(valore))
