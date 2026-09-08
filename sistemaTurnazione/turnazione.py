@@ -63,7 +63,7 @@ class Turnazione:
 
         # Vincoli configurabili (default: attivi)
         self.enforce_consecutive_days = 1  # Controllo 5 giorni consecutivi (1=on, 0=off)
-        self.allow_pomeriggio_via_mattina = 1  # Riposo 11h tra turni (1=enforce 11h, 0=relax to 10h)
+        self.allow_pomeriggio_via_mattina = 0  # Riposo 11h tra turni (1=relax to 10h, 0=enforce 11h)
 
     def garantisci_caricamento_settimana(self, settimana_key: tuple[int, int]):
         """Garantisce che i turni per una determinata settimana siano caricati in memoria dal DB."""
@@ -851,12 +851,24 @@ class Turnazione:
             else:
                 print("Attenzione: Il dipendente ha già superato il monte ore settimanale. Questo turno sarà interamente straordinario.")
 
-        # Verifica vincolo 11 ore di riposo
+        # Verifica vincolo 11 ore di riposo (configurabile - 11h o 10h per Pomeriggio→Mattina)
         try:
             self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly)
         except ValueError as e:
-            if not force_riposo:
-                raise e
+            if self.allow_pomeriggio_via_mattina:
+                original_pausa = self.PAUSA_TRA_TURNI
+                self.PAUSA_TRA_TURNI = 10
+                try:
+                    self._check_riposo_tra_turni(settimana_key, data_turno, tipo_fascia, dipendente_obj, turno_breve, piano, jolly)
+                except ValueError:
+                    self.PAUSA_TRA_TURNI = original_pausa
+                    if not force_riposo:
+                        raise
+                finally:
+                    self.PAUSA_TRA_TURNI = original_pausa
+            else:
+                if not force_riposo:
+                    raise e
         
         # Verifica vincolo 24 ore riposo settimanale (Warning)
         if not self._check_riposo_settimanale(settimana_key, id_dipendente, data_turno, tipo_fascia, turno_breve):
