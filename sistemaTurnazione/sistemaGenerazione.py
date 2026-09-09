@@ -183,6 +183,156 @@ class SistemaGenerazione:
                 else:
                     best_ass.turnoBreve = False # Rollback in memoria
 
+    def _backtrack_swap_slots(self, anno: int, settimana: int, genera_piani: bool = True):
+        """
+        Post-processing: Per ogni slot vuoto, prova a fare uno swap con slot già riempiti
+        dello stesso giorno ma fascia diversa.
+        Logica:
+          1. Trova slot vuoti (fasce non completamente riempite)
+          2. Per ogni slot vuoto, cerca tra tutti gli slot piena dello stesso giorno un dipendente
+             che potrebbe venire spostato qui
+          3. Se quel dipendente si sposta, il suo vecchio slot diventa vuoto → cerca un replacement
+        Max 5 tentativi per slot per evitare spam.
+        """
+        import sys
+        from io import StringIO
+        print("--- Backtracking: tentativo swap slot vuoti ---")
+        primo_giorno = date.fromisocalendar(anno, settimana, 1)
+        giorni_settimana = [primo_giorno + timedelta(days=i) for i in range(7)]
+        
+        slots_vuoti = []  # lista di (giorno, tipo_fascia, piano_slot, is_jolly_slot)
+        
+        for giorno in giorni_settimana:
+            config = self.turnazione.limiti_piani_fascia
+            for tipo_fascia in [TipoFascia.NOTTE, TipoFascia.MATTINA, TipoFascia.POMERIGGIO]:
+                config_fascia = config.get(tipo_fascia, {})
+                target = sum(config_fascia.get(p, 0) for p in [0, 1, 2]) + config_fascia.get('jolly', 0)
+                fascia_obj = self.turnazione.get_turnazione_settimana((anno, settimana)).get(giorno, {}).get(tipo_fascia)
+                current = len(fascia_obj.assegnazioni) if fascia_obj else 0
+                if current < target:
+                    # Costruiamo gli slot mancanti
+                    slots_obiettivi = []
+                    for p in [0, 1, 2]:
+                        for _ in range(config_fascia.get(p, 0)):
+                            slots_obiettivi.append((p, False))
+                    for _ in range(config_fascia.get('jolly', 0)):
+                        slots_obiettivi.append((1, True))
+                    slots_manca = target - current
+                    for i in range(slots_manca):
+                        piano_slot, is_jolly_slot = slots_obiettivi[current + i]
+                        slots_vuoti.append((giorno, tipo_fascia, piano_slot, is_jolly_slot))
+        
+        swaps_effettuati = 0
+        # Soppresse la stampa durante gli swap per evitare spam di warning
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        try:
+            for (giorno, tipo_vuoto, piano_slot, is_jolly_slot) in slots_vuoti:
+                swapped = False
+                for _ in range(5):  # max 5 tentativi per slot
+                    if swapped:
+                        break
+                    # Cerca un dipendente in un'altra fascia dello stesso giorno che può essere spostato qui
+                    for tipo_altro in [TipoFascia.NOTTE, TipoFascia.MATTINA, TipoFascia.POMERIGGIO]:
+                        if tipo_altro == tipo_vuoto:
+                            continue
+                        fascia_altro = self.turnazione.get_turnazione_settimana((anno, settimana)).get(giorno, {}).get(tipo_altro)
+                        if not fascia_altro or not fascia_altro.assegnazioni:
+                            continue
+                        
+                        # Prova ogni dipendente in questa fascia
+                        for ass_altro in list(fascia_altro.assegnazioni):
+                            dip = ass_altro.dipendente
+                            # Prova a spostare questo dipendente allo slot vuoto
+                            try:
+                                self.turnazione.assegna_turno(
+                                    self.sistema_dipendenti,
+                                    dip.id_dipendente,
+                                    giorno,
+                                    tipo_vuoto,
+                                    piano=piano_slot if genera_piani else 0,
+                                    jolly=is_jolly_slot if genera_piani else False,
+                                    stato=StatoFascia.GENERATA
+                                )
+                                # Se siamo qui, il dipendente è stato spostato con successo
+                                # Ora dobbiamo riempire il vuoto creato in fascia_altro
+                                # Rimuoviamo il dipendended dalla fascia originale
+                                fascia_altro.remove_assegnazione(dip.id_dipendente)
+                                
+                                # Cerca un replacement per il slot vuoto in fascia_altro
+                                config_altro = self.turnazione.limiti_piani_fascia.get(tipo_altro, {})
+                                slots_altro = []
+                                for p in [0, 1, 2]:
+                                    for _ in range(config_altro.get(p, 0)):
+                                        slots_altro.append((p, False))
+                                for _ in range(config_altro.get('jolly', 0)):
+                                    slots_altro.append((1, True))
+                                idx_vuoto = len(fascia_altro.assegnazioni)
+                                if idx_vuoto < len(slots_altro):
+                                    piano_r, is_jolly_r = slots_altro[idx_vuoto]
+                                else:
+                                    piano_r, is_jolly_r = (0, False)
+                                
+                                candidati_r = self.turnazione.get_candidati_disponibili(self.sistema_dipendenti, giorno, tipo_altro)
+                                candidati_r_ordinati = self._sort_candidati_per_rotazione(candidati_r, tipo_altro, anno, settimana, giorno)
+                                
+                                replacement_found = False
+                                for cand_r in candidati_r_ordinati:
+                                    try:
+                                        self.turnazione.assegna_turno(
+                                            self.sistema_dipendenti,
+                                            cand_r.id_dipendente,
+                                            giorno,
+                                            tipo_altro,
+                                            piano=piano_r if genera_piani else 0,
+                                            jolly=is_jolly_r if genera_piani else False,
+                                            stato=StatoFascia.GENERATA
+                                        )
+                                        replacement_found = True
+                                        break
+                                    except ValueError:
+                                        continue
+                                
+                                if not replacement_found:
+                                    # Rilascio vacuum in fascia_altro — undos swap togliendo il dipendente da tipo_vuoto
+                                    fascia_vuoto = self.turnazione.get_turnazione_settimana((anno, settimana)).get(giorno, {}).get(tipo_vuoto)
+                                    if fascia_vuoto:
+                                        fascia_vuoto.remove_assegnazione(dip.id_dipendente)
+                                    # Metterlo back in fascia_altro
+                                    self.turnazione.assegna_turno(
+                                        self.sistema_dipendenti,
+                                        dip.id_dipendente,
+                                        giorno,
+                                        tipo_altro,
+                                        piano=ass_altro.piano if genera_piani else 0,
+                                        jolly=ass_altro.jolly if genera_piani else False,
+                                        stato=StatoFascia.GENERATA
+                                    )
+                                    continue
+                                
+                                # Swap completato con successo!
+                                swapped = True
+
+                                swaps_effettuati += 1
+                                sys.stdout = old_stdout
+                                print(f"  -> Swap: {dip.nome} {dip.cognome} da {tipo_altro.value} a {tipo_vuoto.value} il {giorno}")
+                                sys.stdout = StringIO()
+                                break
+                            except ValueError:
+                                continue
+                    if swapped:
+                        break
+                if not swapped:
+                    pass  # Silenzioso per slot non risolti
+        finally:
+            sys.stdout = old_stdout
+        
+        if swaps_effettuati:
+            print(f"--- Backtracking completato: {swaps_effettuati} swap effettuati ---")
+        else:
+            print("--- Backtracking completato: 0 swap effettuati ---")
+        return swaps_effettuati
+
     def genera_turnazione_automatica(self, anno: int, settimana: int, genera_piani: bool = True) -> bool:
         """
         Genera automaticamente i turni per la settimana specificata.
@@ -252,9 +402,12 @@ class SistemaGenerazione:
                                 continue # Se l'assegnazione fallisce (es. trigger DB), prova il prossimo candidato
                         
                         if not assigned:
-                            print(f"WARNING: Impossibile trovare candidati validi per {tipo_fascia.value} del {giorno}. (Slot {count_attuale+1}/{target_operatori})")
                             break # Esce dal while per evitare loop infinito su questo slot, passa al prossimo turno
         
+        # Post-processing: Backtracking swap per slot irrisolti
+        self._backtrack_swap_slots(anno, settimana, genera_piani)
+        
+        # Post-processing: Assegna riposi mancanti
         self._assegna_riposi_mancanti(anno, settimana)
 
         # Post-Processing: Turni Brevi
