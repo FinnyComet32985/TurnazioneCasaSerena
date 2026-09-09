@@ -10,6 +10,57 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 from sistemaTurnazione.fasciaOraria import TipoFascia
 from sistemaDipendenti.dipendente import StatoDipendente
 
+def _append_fascia(row, fasce_giorno, tipo, fasce_disponibili, duplicati_cognomi, col_idx):
+    """Appends the formatted names for a fascia to the row."""
+    col_widths = [1.8*cm, 3.7*cm, 3.7*cm, 2.7*cm, 2.7*cm, 3.4*cm]
+    fascia = fasce_giorno.get(tipo)
+    if fascia and fascia.assegnazioni:
+        nomi = []
+        for ass in fascia.assegnazioni:
+            tag = ""
+            is_jolly = getattr(ass, 'jolly', False)
+            if not is_jolly and getattr(ass, 'piano', None) is not None and tipo != TipoFascia.NOTTE:
+                tag += f" {'PT' if ass.piano == 0 else f'P{ass.piano}'}"
+            if is_jolly: tag += " J"
+            if getattr(ass, 'turnoBreve', False): tag += " C"
+            
+            if ass.dipendente.cognome in duplicati_cognomi:
+                nome_display = f"{ass.dipendente.cognome} {ass.dipendente.nome[0]}."
+            else:
+                nome_display = ass.dipendente.cognome
+            
+            nomi.append(f"{nome_display}{tag}")
+        
+        col_w_pts = col_widths[col_idx]
+        limit_w = col_w_pts - 12
+        
+        nomi_wrapped = []
+        current_line = ""
+        count_in_line = 0
+        
+        for n in nomi:
+            if tipo == TipoFascia.NOTTE:
+                nomi_wrapped.append(n)
+                continue
+            
+            if not current_line:
+                current_line = n
+                count_in_line = 1
+            else:
+                test_line = f"{current_line}  |  {n}"
+                if count_in_line < 2 and stringWidth(test_line, 'Helvetica-Bold', 10.5) < limit_w:
+                    current_line = test_line
+                    count_in_line += 1
+                else:
+                    nomi_wrapped.append(current_line)
+                    current_line = n
+                    count_in_line = 1
+        if current_line and tipo != TipoFascia.NOTTE:
+            nomi_wrapped.append(current_line)
+        row.append("\n".join(nomi_wrapped))
+    else:
+        row.append("-")
+
 def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_disponibili):
     """Genera un PDF in formato A4 verticale della turnazione settimanale."""
     
@@ -78,7 +129,7 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
         elements.append(Paragraph("<i>Nessuna turnazione definita per questa settimana.</i>", style_info))
     else:
         # Header Tabella
-        data = [["GIORNO", "MATTINA", "POMERIGGIO", "NOTTE", "RIPOSO"]]
+        data = [["GIORNO", "MATTINA", "POMERIGGIO", "NOTTE", "SMONT.", "RIPOSO"]]
         giorni_nomi = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB", "DOM"]
         
         for i in range(7):
@@ -87,64 +138,37 @@ def genera_pdf_settimanale(path, monday, sistema_dipendenti, turnazione, fasce_d
             row = [giorno_str]
             
             fasce_giorno = settimana_dict.get(dt, {})
-            for tipo in fasce_disponibili:
-                fascia = fasce_giorno.get(tipo)
-                if fascia and fascia.assegnazioni:
-                    nomi = []
-                    for ass in fascia.assegnazioni:
-                        tag = ""
-                        is_jolly = getattr(ass, 'jolly', False)
-                        # Non stampiamo il piano per il turno di notte
-                        if not is_jolly and getattr(ass, 'piano', None) is not None and tipo != TipoFascia.NOTTE: 
-                            tag += f" {'PT' if ass.piano == 0 else f'P{ass.piano}'}"
-                        if is_jolly: tag += " J"
-                        if getattr(ass, 'turnoBreve', False): tag += " C"
-                        
-                        # Mostra l'iniziale solo se il cognome non è unico
-                        if ass.dipendente.cognome in duplicati_cognomi:
-                            nome_display = f"{ass.dipendente.cognome} {ass.dipendente.nome[0]}."
-                        else:
-                            nome_display = ass.dipendente.cognome
-                        
-                        nomi.append(f"{nome_display}{tag}")
-                    
-                    # Organizzazione nomi: due per riga solo se non superano la larghezza cella
-                    col_idx = fasce_disponibili.index(tipo) + 1
-                    col_w_pts = [1.8*cm, 5.1*cm, 5.1*cm, 3.6*cm, 3.8*cm][col_idx]
-                    limit_w = col_w_pts - 12 # Sottraiamo il padding interno (6pt per lato)
-                    
-                    nomi_wrapped = []
-                    current_line = ""
-                    count_in_line = 0
-                    
-                    for n in nomi:
-                        # Se è notte, mettiamo sempre uno sotto l'altro (un nome per riga)
-                        if tipo == TipoFascia.NOTTE:
-                            nomi_wrapped.append(n)
-                            continue
-
-                        if not current_line:
-                            current_line = n
-                            count_in_line = 1
-                        else:
-                            test_line = f"{current_line}  |  {n}"
-                            # Se ci sono già 2 nomi o se il terzo non entrerebbe, andiamo a capo
-                            if count_in_line < 2 and stringWidth(test_line, 'Helvetica-Bold', 10.5) < limit_w:
-                                current_line = test_line
-                                count_in_line += 1
-                            else:
-                                nomi_wrapped.append(current_line)
-                                current_line = n
-                                count_in_line = 1
-                    if current_line and tipo != TipoFascia.NOTTE:
-                        nomi_wrapped.append(current_line)
-                    row.append("\n".join(nomi_wrapped))
-                else:
-                    row.append("-")
+            
+            # Prima colonna: MATTINA
+            _append_fascia(row, fasce_giorno, TipoFascia.MATTINA, fasce_disponibili, duplicati_cognomi, 1)
+            # Seconda colonna: POMERIGGIO
+            _append_fascia(row, fasce_giorno, TipoFascia.POMERIGGIO, fasce_disponibili, duplicati_cognomi, 2)
+            # Terza colonna: NOTTE
+            _append_fascia(row, fasce_giorno, TipoFascia.NOTTE, fasce_disponibili, duplicati_cognomi, 3)
+            
+            # Quarta colonna: SMONTANTE (quelli che hanno fatto la notte il giorno prima)
+            if i == 0:
+                # Lunedì: la notte di domenica precedente
+                data_giorno_prima = dt - timedelta(days=1)
+                anno_prec, sett_prec, _ = data_giorno_prima.isocalendar()
+                key_prec = (anno_prec, sett_prec)
+                turnazione.garantisci_caricamento_settimana(key_prec)
+                settimana_prec = turnazione.turnazioneSettimanale.get(key_prec, {})
+                fasce_giorno_prima = settimana_prec.get(data_giorno_prima, {})
+            else:
+                data_giorno_prima = monday + timedelta(days=i-1)
+                fasce_giorno_prima = settimana_dict.get(data_giorno_prima, {})
+            
+            fascia_notte_prev = fasce_giorno_prima.get(TipoFascia.NOTTE)
+            _append_fascia(row, {TipoFascia.NOTTE: fascia_notte_prev}, TipoFascia.NOTTE, fasce_disponibili, duplicati_cognomi, 4)
+            
+            # Quinta colonna: RIPOSO
+            _append_fascia(row, fasce_giorno, TipoFascia.RIPOSO, fasce_disponibili, duplicati_cognomi, 5)
+            
             data.append(row)
 
-        # Larghezza totale A4 (21cm) - Margini (4cm) = 17cm disponibili
-        table = Table(data, colWidths=[1.8*cm, 5.1*cm, 5.1*cm, 3.6*cm, 3.8*cm])
+        # Larghezza totale A4 (21cm) - Margini (1.6cm) = 19.4cm disponibili
+        table = Table(data, colWidths=[1.8*cm, 3.7*cm, 3.7*cm, 2.7*cm, 2.7*cm, 3.4*cm])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
